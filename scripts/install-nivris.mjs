@@ -142,7 +142,7 @@ function guardPermissionError(e, resourcesDir) {
     throw e;
 }
 
-function main() {
+async function main() {
     const resourcesDir = findElementApp();
     log(`Element resources: ${resourcesDir}`);
 
@@ -160,10 +160,8 @@ function main() {
             log("webapp/ đã tồn tại (đã cài trước đó) — chỉ cập nhật module.");
         } else if (fs.existsSync(webappAsar)) {
             log("Giải nén webapp.asar...");
-            const extractRes = spawnSync(isWin ? "npx.cmd" : "npx", ["--yes", "@electron/asar", "extract", webappAsar, webappDir], {
-                stdio: "inherit",
-            });
-            if (extractRes.status !== 0) fail("Giải nén webapp.asar thất bại.");
+            const { extractAll } = await import("@electron/asar");
+            extractAll(webappAsar, webappDir);
             fs.renameSync(webappAsar, webappBackup);
             log(`Đã sao lưu webapp.asar gốc -> ${webappBackup}`);
         } else {
@@ -210,4 +208,7 @@ function main() {
     log("Lưu ý: Element tự cập nhật sẽ ghi đè lại webapp.asar gốc — sau mỗi lần Element tự update, chạy lại lệnh này.");
 }
 
-main();
+main().catch((e) => {
+    console.error(e);
+    process.exit(1);
+});

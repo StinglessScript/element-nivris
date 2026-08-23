@@ -17,6 +17,7 @@
     },
     "dependencies": {
         "@arcmantle/vite-plugin-import-css-sheet": "^1.0.12",
+        "@electron/asar": "^4.2.1",
         "@element-hq/element-web-module-api": "^1.17.0",
         "@types/node": "^22.10.0",
         "@types/react": "^19.2.10",
