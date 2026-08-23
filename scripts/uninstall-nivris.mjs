@@ -44,12 +44,35 @@ function findElementApp() {
         return resourcesDirFromAppPath(path.join(base, versions[versions.length - 1]));
     }
 
+    if (process.platform === "linux") {
+        const candidates = ["/opt/Element", "/opt/element-desktop", "/usr/lib/element-desktop"];
+        const found = candidates.find((p) => fs.existsSync(p));
+        if (!found) fail("Không tìm thấy bản cài Element ở /opt/Element (chỉ hỗ trợ bản .deb/apt).");
+        return resourcesDirFromAppPath(found);
+    }
+
     fail(`Chưa hỗ trợ nền tảng: ${process.platform}`);
 }
 
+/** Under `sudo`, os.homedir()/$XDG_CONFIG_HOME resolve to root's, not the invoking user's. */
+function realHomeDir() {
+    if (process.env.SUDO_UID) {
+        try {
+            return os.userInfo({ uid: Number(process.env.SUDO_UID) }).homedir;
+        } catch {
+            // fall through
+        }
+    }
+    return os.homedir();
+}
+
 function userConfigPath() {
-    if (process.platform === "darwin") return path.join(os.homedir(), "Library/Application Support/Element/config.json");
+    if (process.platform === "darwin") return path.join(realHomeDir(), "Library/Application Support/Element/config.json");
     if (process.platform === "win32") return path.join(process.env.APPDATA ?? "", "Element/config.json");
+    if (process.platform === "linux") {
+        const configHome = process.env.SUDO_UID ? null : process.env.XDG_CONFIG_HOME;
+        return path.join(configHome || path.join(realHomeDir(), ".config"), "Element/config.json");
+    }
     fail(`Chưa hỗ trợ nền tảng: ${process.platform}`);
 }
 
@@ -69,11 +92,13 @@ function main() {
         log(`Đã khôi phục webapp.asar gốc tại ${webappAsar}`);
     } catch (e) {
         if (e.code === "EPERM" || e.code === "EACCES") {
-            fail(
-                process.platform === "darwin"
-                    ? "Không có quyền ghi — cấp quyền 'App Management' cho Terminal trong System Settings rồi thử lại."
-                    : "Không có quyền ghi — thử chạy lại với quyền Administrator.",
-            );
+            if (process.platform === "darwin") {
+                fail("Không có quyền ghi — cấp quyền 'App Management' cho Terminal trong System Settings rồi thử lại.");
+            }
+            if (process.platform === "linux") {
+                fail(`Không có quyền ghi vào ${resourcesDir}. Chạy lại với sudo.`);
+            }
+            fail(`Không có quyền ghi vào ${resourcesDir}. Thử chạy lại với quyền Administrator.`);
         }
         throw e;
     }
@@ -86,6 +111,13 @@ function main() {
                 config.modules = config.modules.filter((m) => m !== "/modules/nivris.js");
                 fs.writeFileSync(configPath, JSON.stringify(config, null, 4));
                 log(`Đã bỏ "/modules/nivris.js" khỏi ${configPath}`);
+                if (process.platform === "linux" && process.env.SUDO_UID) {
+                    try {
+                        fs.chownSync(configPath, Number(process.env.SUDO_UID), Number(process.env.SUDO_GID ?? process.env.SUDO_UID));
+                    } catch (e) {
+                        log(`Cảnh báo: không đổi được chủ sở hữu ${configPath} về user thường (${e.message}).`);
+                    }
+                }
             }
         } catch {
             log(`Cảnh báo: không đọc được ${configPath}, bỏ qua bước dọn config.`);

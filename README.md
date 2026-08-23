@@ -22,7 +22,11 @@ npx -y -p github:StinglessScript/element-nivris nivris-install
 
 - macOS: patches `/Applications/Element.app`.
 - Windows: patches `%LOCALAPPDATA%\Element\app-x.y.z` (Squirrel install) — untested, please report issues.
-- A different install location: set `ELEMENT_APP_PATH=/path/to/Element.app` (or the Windows `app-x.y.z` folder) before the command.
+- Linux: patches a `.deb`/apt install at `/opt/Element` (needs `sudo`, since `/opt` is root-owned).
+  **AppImage and Snap are not supported** — an AppImage remounts a fresh read-only image every
+  run, so there's nowhere to persist a patch, and Snap's sandbox blocks writes outside its own
+  data directory. Use the `.deb` package instead.
+- A different install location: set `ELEMENT_APP_PATH=/path/to/Element.app` (or the Windows `app-x.y.z` folder, or the Linux dir containing `resources/`) before the command.
 
 No rebuild or re-signing of Element itself: it builds the module, unpacks
 `webapp.asar` into a plain `webapp/` folder (Element's own resource loader

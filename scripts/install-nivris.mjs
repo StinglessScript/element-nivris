@@ -73,12 +73,47 @@ function findElementApp() {
         return resourcesDirFromAppPath(path.join(base, versions[versions.length - 1]));
     }
 
-    fail(`Chưa hỗ trợ nền tảng: ${process.platform} (chỉ macOS và Windows).`);
+    if (process.platform === "linux") {
+        // Only .deb/apt installs (electron-builder's default "/opt/<ProductName>" layout) are
+        // supported. AppImage mounts a read-only, disposable squashfs image at runtime — there is
+        // nowhere persistent to write a patch. Snap sandboxes block writes outside its own data
+        // dirs the same way. Both need a different distribution mechanism than this script.
+        const candidates = ["/opt/Element", "/opt/element-desktop", "/usr/lib/element-desktop"];
+        const found = candidates.find((p) => fs.existsSync(p));
+        if (!found) {
+            fail(
+                "Không tìm thấy bản cài Element ở /opt/Element (bản .deb/apt).\n" +
+                    "Nếu bạn dùng AppImage hoặc Snap: cách này KHÔNG áp dụng được — AppImage là ảnh nén chỉ đọc,\n" +
+                    "mount lại từ đầu mỗi lần chạy nên không có chỗ nào để lưu patch lâu dài; Snap thì sandbox chặn\n" +
+                    "ghi ra ngoài thư mục dữ liệu riêng của nó. Cài bản .deb (apt) thay thế, hoặc chạy lại với\n" +
+                    "ELEMENT_APP_PATH=/duong/dan/thu/muc/element (thư mục chứa 'resources/').",
+            );
+        }
+        return resourcesDirFromAppPath(found);
+    }
+
+    fail(`Chưa hỗ trợ nền tảng: ${process.platform} (chỉ macOS, Windows, Linux .deb/apt).`);
+}
+
+/** Under `sudo`, os.homedir()/$XDG_CONFIG_HOME resolve to root's, not the invoking user's. */
+function realHomeDir() {
+    if (process.env.SUDO_UID) {
+        try {
+            return os.userInfo({ uid: Number(process.env.SUDO_UID) }).homedir;
+        } catch {
+            // fall through
+        }
+    }
+    return os.homedir();
 }
 
 function userConfigPath() {
-    if (process.platform === "darwin") return path.join(os.homedir(), "Library/Application Support/Element/config.json");
+    if (process.platform === "darwin") return path.join(realHomeDir(), "Library/Application Support/Element/config.json");
     if (process.platform === "win32") return path.join(process.env.APPDATA ?? "", "Element/config.json");
+    if (process.platform === "linux") {
+        const configHome = process.env.SUDO_UID ? null : process.env.XDG_CONFIG_HOME;
+        return path.join(configHome || path.join(realHomeDir(), ".config"), "Element/config.json");
+    }
     fail(`Chưa hỗ trợ nền tảng: ${process.platform}`);
 }
 
@@ -98,6 +133,9 @@ function guardPermissionError(e, resourcesDir) {
                     "  System Settings → Privacy & Security → App Management → bật cho Terminal/app của bạn,\n" +
                     "  rồi khởi động lại Terminal và chạy lại lệnh này.",
             );
+        }
+        if (process.platform === "linux") {
+            fail(`Không có quyền ghi vào ${resourcesDir}. Chạy lại với sudo (ví dụ: sudo npx -p github:StinglessScript/element-nivris nivris-install).`);
         }
         fail(`Không có quyền ghi vào ${resourcesDir}. Thử chạy lại với quyền Administrator.`);
     }
@@ -157,6 +195,16 @@ function main() {
     config.modules = Array.from(modules);
     fs.writeFileSync(configPath, JSON.stringify(config, null, 4));
     log(`Đã cập nhật config: ${configPath}`);
+
+    // Running under `sudo` on Linux (needed to write /opt) would otherwise leave config.json
+    // owned by root, unreadable/unwritable by the actual user's later Element runs.
+    if (process.platform === "linux" && process.env.SUDO_UID) {
+        try {
+            fs.chownSync(configPath, Number(process.env.SUDO_UID), Number(process.env.SUDO_GID ?? process.env.SUDO_UID));
+        } catch (e) {
+            log(`Cảnh báo: không đổi được chủ sở hữu ${configPath} về user thường (${e.message}).`);
+        }
+    }
 
     log("XONG. Tắt hẳn Element (không chỉ đóng cửa sổ) rồi mở lại để thấy N.I.V.R.I.S.");
     log("Lưu ý: Element tự cập nhật sẽ ghi đè lại webapp.asar gốc — sau mỗi lần Element tự update, chạy lại lệnh này.");
