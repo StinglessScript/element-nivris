@@ -10,35 +10,40 @@ retention) as they arrive, and are only sent anywhere when you press
 "Phân tích" — to an Anthropic-compatible endpoint you configure yourself
 (model / base URL / API key, in the module's own Settings panel).
 
-## Requirements
-
-This module is built with `@element-hq/element-web-module-api`, a
-workspace package inside the [element-hq/element-web](https://github.com/element-hq/element-web)
-monorepo. It cannot be built standalone — drop this folder in as
-`modules/nivris/` inside a checkout of that repo (it's already part of the
-`modules/*` pnpm workspace glob there), then `pnpm install` from the repo
-root.
+Fully standalone — no element-web monorepo checkout needed to build or install it.
 
 ## Install into an already-installed Element Desktop
 
-No rebuild or re-signing of Element itself required:
+One command, no manual `git clone`:
 
 ```bash
-cd modules/nivris
-npm run install:live      # macOS: /Applications/Element.app
-                           # Windows: %LOCALAPPDATA%\Element\app-x.y.z (untested — please report issues)
+npx -y -p github:StinglessScript/element-nivris nivris-install
 ```
 
-Point at a different install with `ELEMENT_APP_PATH=/path/to/Element.app` (or the Windows `app-x.y.z` folder).
+- macOS: patches `/Applications/Element.app`.
+- Windows: patches `%LOCALAPPDATA%\Element\app-x.y.z` (Squirrel install) — untested, please report issues.
+- A different install location: set `ELEMENT_APP_PATH=/path/to/Element.app` (or the Windows `app-x.y.z` folder) before the command.
 
-To remove it: `npm run uninstall:live`.
+No rebuild or re-signing of Element itself: it builds the module, unpacks
+`webapp.asar` into a plain `webapp/` folder (Element's own resource loader
+falls back to that when the asar is missing), drops the built module in as
+`webapp/modules/nivris.js`, and registers it via the user's local
+`config.json` `"modules"` array.
+
+To remove it:
+
+```bash
+npx -y -p github:StinglessScript/element-nivris nivris-uninstall
+```
 
 Element's own auto-updater will overwrite the patched files on update —
-re-run `install:live` afterwards.
+re-run the install command afterwards.
 
 ## Develop
 
 ```bash
+npm install
 npm run build       # vite build -> lib/index.js
 npm run lint:types  # tsc --noEmit
+npm run install:live   # same as npx nivris-install, but from a local checkout
 ```
