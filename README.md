@@ -17,28 +17,26 @@ Fully standalone — no element-web monorepo checkout needed to build or install
 One command, no manual `git clone`:
 
 ```bash
-(cd /tmp && npx -y -p github:StinglessScript/element-nivris nivris-install)
+npx -y -p github:StinglessScript/element-nivris nivris-install
 ```
 
 - macOS: patches `/Applications/Element.app`. No `sudo` needed (just a one-time "App Management" permission grant the first time — the command's own error message tells you exactly where to enable it if it's missing).
 - Windows: patches `%LOCALAPPDATA%\Element\app-x.y.z` (Squirrel install) — untested, please report issues.
 - Linux: patches a `.deb`/apt install at `/opt/Element` — needs `sudo`, since `/opt` is root-owned:
   ```bash
-  (cd /tmp && sudo npx -y -p github:StinglessScript/element-nivris nivris-install)
+  sudo npx -y -p github:StinglessScript/element-nivris nivris-install
   ```
   **AppImage and Snap are not supported** — an AppImage remounts a fresh read-only image every
   run, so there's nowhere to persist a patch, and Snap's sandbox blocks writes outside its own
   data directory. Use the `.deb` package instead.
 - A different install location: set `ELEMENT_APP_PATH=/path/to/Element.app` (or the Windows `app-x.y.z` folder, or the Linux dir containing `resources/`) before the command.
 
-**Why `(cd /tmp && ...)` instead of just the bare `npx ...`?** `npm`/`npx` look for a
-`devEngines`/`packageManager` declaration in the *current directory's* `package.json` (walking
-upward), not just the package being installed. If you happen to run the command from inside a
-`pnpm`-managed repo (element-web's own checkout, for instance), npm errors with `EBADDEVENGINES`
-because that unrelated repo requires `pnpm`, not `npm`. Wrapping the command in `( cd /tmp && … )`
-runs it from a directory with no `package.json` to conflict with, and — because it's a
-subshell — your terminal's own working directory is untouched afterwards. If you'd rather not
-depend on `/tmp` existing, any directory with no `package.json` above it works the same way.
+**Getting `npm error EBADDEVENGINES` / `required: { name: 'pnpm', ... }`?** That means the
+directory you ran the command from has its own `package.json` requiring `pnpm` (e.g. you're
+sitting inside a `pnpm`-managed repo's checkout) — `npm`/`npx` check the *current directory* for
+a `devEngines`/`packageManager` declaration, not just the package being installed. Run the exact
+same command from a different directory (your home directory, `/tmp`, anywhere without that
+`package.json` above it) and it'll go through fine.
 
 No rebuild or re-signing of Element itself: it builds the module, unpacks
 `webapp.asar` into a plain `webapp/` folder (Element's own resource loader
@@ -49,7 +47,7 @@ falls back to that when the asar is missing), drops the built module in as
 To remove it:
 
 ```bash
-(cd /tmp && npx -y -p github:StinglessScript/element-nivris nivris-uninstall)
+npx -y -p github:StinglessScript/element-nivris nivris-uninstall
 ```
 
 Element's own auto-updater will overwrite the patched files on update —
