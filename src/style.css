@@ -1,0 +1,852 @@
+/*
+Copyright 2026 New Vector Ltd.
+
+SPDX-License-Identifier: AGPL-3.0-only OR GPL-3.0-only OR LicenseRef-Element-Commercial
+Please see LICENSE files in the repository root for full details.
+*/
+
+/* Visual language ported from the "N.I.V.R.I.S. AI Workspace UI" design
+   (claude.ai/design project 64ff5e6a-de78-4a26-8c33-b83ad21e7fbc): teal-on-off-white
+   HUD aesthetic, monospace metadata, wide-tracking display labels. Fixed light palette —
+   the source design has no dark variant, so this module does not adapt to Element's theme. */
+
+.mx_NivrisWorkspace {
+    --jv-bg: #eef2f7;
+    --jv-surface: #ffffff;
+    --jv-surface-alt: #f8fafc;
+    --jv-cyan: #0fa3a0;
+    --jv-teal: #0a7c7a;
+    --jv-teal-wash: rgb(15 163 160 / 7%);
+    --jv-border: rgb(15 163 160 / 14%);
+    --jv-border-strong: rgb(15 163 160 / 28%);
+    --jv-amber: #c97a22;
+    --jv-amber-text: #8a5a16;
+    --jv-amber-wash: rgb(201 122 34 / 6%);
+    --jv-danger: #c4443f;
+    --jv-ink: #0b1b26;
+    --jv-body: #33505f;
+    --jv-muted: #5a7080;
+    --jv-label: #52697a;
+    --jv-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+    --jv-display: system-ui, -apple-system, "Segoe UI", sans-serif;
+    --jv-sans: "Inter var", system-ui, -apple-system, sans-serif;
+
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    height: 100%;
+    min-height: 0;
+    position: relative;
+    background-color: var(--jv-bg);
+    color: var(--jv-ink);
+    font-family: var(--jv-sans);
+}
+
+.mx_NivrisWorkspace * { box-sizing: border-box; }
+
+@keyframes mx_nivris_blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.25; }
+}
+
+/* ---- Header ---- */
+
+.mx_NivrisWorkspace_header {
+    height: 52px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 0 18px;
+    border-bottom: 1px solid var(--jv-border);
+    background-color: rgb(255 255 255 / 75%);
+}
+
+.mx_NivrisWorkspace_headerTitle {
+    font: 500 12px var(--jv-display);
+    letter-spacing: 0.2em;
+    color: var(--jv-ink);
+}
+
+.mx_NivrisWorkspace_headerDivider {
+    width: 1px;
+    height: 18px;
+    background-color: var(--jv-border-strong);
+}
+
+.mx_NivrisWorkspace_headerLive {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font: 500 10.5px var(--jv-mono);
+    color: var(--jv-teal);
+}
+
+.mx_NivrisWorkspace_liveDot {
+    width: 6px;
+    height: 6px;
+    border-radius: 100%;
+    background-color: var(--jv-cyan);
+    animation: mx_nivris_blink 2s infinite;
+    flex-shrink: 0;
+}
+
+.mx_NivrisWorkspace_headerActions {
+    margin-left: auto;
+    display: flex;
+    gap: 8px;
+}
+
+.mx_NivrisWorkspace_iconBtn {
+    width: 30px;
+    height: 30px;
+    border: 1px solid var(--jv-border-strong);
+    border-radius: 5px;
+    background: none;
+    color: var(--jv-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+.mx_NivrisWorkspace_iconBtn:hover { background-color: var(--jv-teal-wash); }
+.mx_NivrisWorkspace_iconBtn.mx_NivrisWorkspace_iconBtn_active {
+    background-color: var(--jv-teal);
+    border-color: var(--jv-teal);
+    color: #fff;
+}
+
+/* ---- Split ---- */
+
+.mx_NivrisWorkspace_split { display: flex; flex-direction: row; flex: 1; min-height: 0; }
+
+/* ---- Session sidebar ---- */
+
+.mx_NivrisWorkspace_sidebar {
+    width: 260px;
+    flex-shrink: 0;
+    background-color: var(--jv-surface-alt);
+    border-right: 1px solid var(--jv-border);
+    display: flex;
+    flex-direction: column;
+}
+
+.mx_NivrisWorkspace_sidebarHead {
+    padding: 14px 14px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    border-bottom: 1px solid var(--jv-border);
+}
+
+.mx_NivrisWorkspace_sidebarLabel {
+    font: 500 10px var(--jv-display);
+    letter-spacing: 0.16em;
+    color: var(--jv-label);
+}
+
+.mx_NivrisWorkspace_search {
+    height: 28px;
+    border: 1px solid var(--jv-border);
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    padding: 0 9px;
+
+    input {
+        border: none;
+        outline: none;
+        background: none;
+        width: 100%;
+        font: 400 11px var(--jv-mono);
+        color: var(--jv-body);
+
+        &::placeholder { color: var(--jv-muted); }
+    }
+}
+
+.mx_NivrisWorkspace_sessionList {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 10px 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.mx_NivrisWorkspace_sessionGroupLabel {
+    padding: 0 6px 4px;
+    font: 500 9.5px var(--jv-mono);
+    color: var(--jv-muted);
+    letter-spacing: 0.12em;
+}
+
+.mx_NivrisWorkspace_sessionRow {
+    appearance: none;
+    width: 100%;
+    text-align: left;
+    border: none;
+    background: none;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 7px 8px;
+    border-radius: 5px;
+    cursor: pointer;
+    color: var(--jv-ink);
+}
+
+.mx_NivrisWorkspace_sessionRow:hover { background-color: var(--jv-teal-wash); }
+.mx_NivrisWorkspace_sessionRow.mx_NivrisWorkspace_sessionRow_active { background-color: rgb(15 163 160 / 10%); }
+
+.mx_NivrisWorkspace_sessionDot { width: 6px; height: 6px; border-radius: 100%; flex-shrink: 0; }
+
+.mx_NivrisWorkspace_sessionMain { flex: 1; min-width: 0; }
+.mx_NivrisWorkspace_sessionName {
+    font: 500 12px var(--jv-sans);
+    color: var(--jv-ink);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.mx_NivrisWorkspace_sessionMeta {
+    font: 400 9.5px var(--jv-mono);
+    color: var(--jv-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.mx_NivrisWorkspace_sessionBadge {
+    flex-shrink: 0;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 9px;
+    background-color: var(--jv-amber-wash);
+    color: var(--jv-amber-text);
+    font: 600 9.5px var(--jv-mono);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.mx_NivrisWorkspace_sessionEmpty {
+    padding: 12px 8px;
+    font: 400 11.5px var(--jv-sans);
+    color: var(--jv-muted);
+}
+
+.mx_NivrisWorkspace_sidebarFoot {
+    padding: 10px 14px;
+    border-top: 1px solid var(--jv-border);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font: 400 9.5px var(--jv-mono);
+    color: var(--jv-muted);
+}
+
+/* ---- Main column ---- */
+
+.mx_NivrisWorkspace_main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    background-color: var(--jv-surface);
+}
+
+.mx_NivrisWorkspace_mainHead {
+    flex-shrink: 0;
+    padding: 16px 22px 13px;
+    border-bottom: 1px solid var(--jv-border);
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+}
+
+.mx_NivrisWorkspace_mainHeadName {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+}
+
+.mx_NivrisWorkspace_mainName { font: 500 16px var(--jv-sans); color: var(--jv-ink); }
+
+.mx_NivrisWorkspace_typeBadge {
+    padding: 2px 7px;
+    border-radius: 3px;
+    background-color: rgb(15 163 160 / 12%);
+    color: var(--jv-teal);
+    font: 600 9px var(--jv-mono);
+    letter-spacing: 0.04em;
+}
+
+.mx_NivrisWorkspace_mainSource { margin-top: 4px; font: 400 10.5px var(--jv-mono); color: var(--jv-label); }
+
+.mx_NivrisWorkspace_statRow { display: flex; gap: 10px; margin-left: auto; }
+
+.mx_NivrisWorkspace_stat {
+    min-width: 74px;
+    border: 1px solid var(--jv-border);
+    border-radius: 4px;
+    padding: 7px 10px;
+}
+.mx_NivrisWorkspace_stat.mx_NivrisWorkspace_stat_warn {
+    border-color: rgb(201 122 34 / 28%);
+    background-color: var(--jv-amber-wash);
+}
+.mx_NivrisWorkspace_statLabel { font: 400 9px var(--jv-mono); color: var(--jv-label); }
+.mx_NivrisWorkspace_statNum { margin-top: 3px; font: 600 17px var(--jv-mono); color: var(--jv-ink); }
+.mx_NivrisWorkspace_stat_warn .mx_NivrisWorkspace_statLabel { color: var(--jv-amber-text); }
+.mx_NivrisWorkspace_stat_warn .mx_NivrisWorkspace_statNum { color: var(--jv-amber); }
+
+.mx_NivrisWorkspace_mainBody {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 16px 22px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+/* ---- AI summary card ---- */
+
+.mx_NivrisWorkspace_aiCard {
+    flex-shrink: 0;
+    border: 1px solid var(--jv-border-strong);
+    border-radius: 5px;
+    background: linear-gradient(180deg, var(--jv-teal-wash), transparent);
+    padding: 14px 15px;
+}
+
+.mx_NivrisWorkspace_aiCardHead { display: flex; align-items: center; gap: 9px; }
+
+.mx_NivrisWorkspace_aiCardTitle {
+    font: 500 10px var(--jv-display);
+    letter-spacing: 0.14em;
+    color: var(--jv-teal);
+}
+
+.mx_NivrisWorkspace_aiCardMeta { font: 400 9.5px var(--jv-mono); color: var(--jv-label); }
+
+.mx_NivrisWorkspace_aiCardAction {
+    margin-left: auto;
+    height: 25px;
+    padding: 0 10px;
+    border: 1px solid var(--jv-border-strong);
+    border-radius: 4px;
+    background: none;
+    display: flex;
+    align-items: center;
+    font: 500 10px var(--jv-mono);
+    color: var(--jv-teal);
+    cursor: pointer;
+}
+.mx_NivrisWorkspace_aiCardAction:hover:not(:disabled) { background-color: rgb(15 163 160 / 10%); }
+.mx_NivrisWorkspace_aiCardAction:disabled { opacity: 0.5; cursor: default; }
+
+.mx_NivrisWorkspace_aiCardBody { margin-top: 10px; display: flex; flex-direction: column; gap: 7px; }
+
+.mx_NivrisWorkspace_aiLine {
+    display: flex;
+    gap: 8px;
+    font: 300 12.5px/1.55 var(--jv-sans);
+    color: var(--jv-body);
+}
+.mx_NivrisWorkspace_aiLine > span:first-child { color: var(--jv-teal); flex-shrink: 0; }
+
+.mx_NivrisWorkspace_aiEmpty { font: 400 12px var(--jv-sans); color: var(--jv-muted); }
+.mx_NivrisWorkspace_aiHint { margin-top: 8px; font: 400 11px var(--jv-sans); color: var(--jv-danger); }
+
+.mx_NivrisWorkspace_aiNotConfigured { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
+
+.mx_NivrisWorkspace_aiLoading { display: flex; align-items: center; gap: 14px; padding: 4px 0; }
+.mx_NivrisWorkspace_aiLoadingTitle { font: 500 12.5px var(--jv-sans); color: var(--jv-ink); }
+.mx_NivrisWorkspace_aiLoadingSub { margin-top: 3px; font: 400 10px var(--jv-mono); color: var(--jv-muted); }
+
+@keyframes mx_nivris_spin { to { transform: rotate(360deg); } }
+.mx_NivrisWorkspace_spinner {
+    display: inline-block;
+    width: 11px;
+    height: 11px;
+    border-radius: 100%;
+    border: 1.5px solid rgb(15 163 160 / 25%);
+    border-top-color: var(--jv-teal);
+    animation: mx_nivris_spin 0.8s linear infinite;
+    flex-shrink: 0;
+}
+.mx_NivrisWorkspace_spinner_lg { width: 30px; height: 30px; border-width: 2.5px; }
+
+/* ---- Room distribution ---- */
+
+.mx_NivrisWorkspace_distCard { flex-shrink: 0; }
+.mx_NivrisWorkspace_sectionLabel {
+    font: 500 9.5px var(--jv-display);
+    letter-spacing: 0.14em;
+    color: var(--jv-label);
+    margin-bottom: 9px;
+}
+.mx_NivrisWorkspace_distRow {
+    display: grid;
+    grid-template-columns: 120px 1fr 40px;
+    align-items: center;
+    gap: 10px;
+    margin: 7px 0;
+}
+.mx_NivrisWorkspace_distLabel {
+    font: 400 11.5px var(--jv-sans);
+    color: var(--jv-body);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.mx_NivrisWorkspace_distTrack { height: 6px; border-radius: 3px; background-color: rgb(15 163 160 / 8%); overflow: hidden; }
+.mx_NivrisWorkspace_distFill { height: 100%; border-radius: 3px; background-color: var(--jv-cyan); }
+.mx_NivrisWorkspace_distPct { text-align: right; font: 500 10px var(--jv-mono); color: var(--jv-label); }
+
+/* ---- Message feed ---- */
+
+.mx_NivrisWorkspace_feed { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 10px; padding-bottom: 14px; }
+
+.mx_NivrisWorkspace_roomTabs {
+    flex-shrink: 0;
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    padding-bottom: 2px;
+}
+.mx_NivrisWorkspace_roomTab {
+    appearance: none;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    height: 30px;
+    padding: 0 11px;
+    border: 1px solid var(--jv-border);
+    border-radius: 15px;
+    background: none;
+    font: 500 11px var(--jv-sans);
+    color: var(--jv-muted);
+    cursor: pointer;
+    white-space: nowrap;
+}
+.mx_NivrisWorkspace_roomTab:hover { background-color: var(--jv-teal-wash); }
+.mx_NivrisWorkspace_roomTab_active {
+    border-color: var(--jv-border-strong);
+    background-color: rgb(15 163 160 / 10%);
+    color: var(--jv-ink);
+}
+.mx_NivrisWorkspace_roomTabDot { width: 6px; height: 6px; border-radius: 100%; flex-shrink: 0; }
+.mx_NivrisWorkspace_roomTabCount { font: 500 9.5px var(--jv-mono); color: var(--jv-muted); }
+
+.mx_NivrisWorkspace_feedList { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+
+.mx_NivrisWorkspace_feedRow {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 5px 4px 11px;
+    border: 1px solid var(--jv-border);
+    border-radius: 5px;
+    background-color: var(--jv-surface);
+}
+.mx_NivrisWorkspace_feedRow:hover { border-color: var(--jv-border-strong); background-color: var(--jv-teal-wash); }
+.mx_NivrisWorkspace_feedRow_active { border-color: var(--jv-teal); background-color: rgb(15 163 160 / 8%); }
+
+.mx_NivrisWorkspace_feedRowMain {
+    appearance: none;
+    flex: 1;
+    min-width: 0;
+    text-align: left;
+    cursor: pointer;
+    display: flex;
+    gap: 10px;
+    padding: 6px 0;
+    border: none;
+    background: none;
+    font: inherit;
+    color: inherit;
+}
+
+.mx_NivrisWorkspace_feedRowActions { flex-shrink: 0; display: flex; gap: 4px; }
+.mx_NivrisWorkspace_feedRowAction {
+    width: 26px;
+    height: 26px;
+    border: none;
+    border-radius: 4px;
+    background: none;
+    color: var(--jv-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+.mx_NivrisWorkspace_feedRowAction:hover { background-color: rgb(15 163 160 / 14%); color: var(--jv-teal); }
+.mx_NivrisWorkspace_feedDot { width: 8px; height: 8px; border-radius: 100%; margin-top: 5px; flex-shrink: 0; }
+.mx_NivrisWorkspace_feedTitle { font: 500 12.5px var(--jv-sans); color: var(--jv-ink); line-height: 1.4; }
+.mx_NivrisWorkspace_feedMeta { margin-top: 3px; font: 400 9.5px var(--jv-mono); color: var(--jv-label); }
+
+.mx_NivrisWorkspace_feedEmpty {
+    border: 1px dashed var(--jv-border-strong);
+    border-radius: 5px;
+    padding: 22px;
+    text-align: center;
+    font: 400 11.5px var(--jv-sans);
+    color: var(--jv-muted);
+}
+
+.mx_NivrisWorkspace_dangerRow { flex-shrink: 0; padding: 12px 0 16px; }
+.mx_NivrisWorkspace_dangerBtn {
+    width: 100%;
+    height: 34px;
+    border: 1px solid rgb(196 68 63 / 30%);
+    border-radius: 5px;
+    background: none;
+    color: var(--jv-danger);
+    font: 500 11px var(--jv-mono);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    cursor: pointer;
+}
+.mx_NivrisWorkspace_dangerBtn:hover { background-color: rgb(196 68 63 / 6%); }
+
+/* ---- Composer ---- */
+
+.mx_NivrisWorkspace_composerWrap { flex-shrink: 0; padding: 14px 22px 16px; border-top: 1px solid var(--jv-border); }
+
+.mx_NivrisWorkspace_composer {
+    height: 44px;
+    border: 1px solid var(--jv-border-strong);
+    border-radius: 5px;
+    background-color: var(--jv-surface-alt);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 12px;
+    position: relative;
+}
+
+.mx_NivrisWorkspace_composerPrompt { font: 500 11px var(--jv-mono); color: var(--jv-teal); }
+
+.mx_NivrisWorkspace_composerMain { flex: 1; min-width: 0; position: relative; }
+.mx_NivrisWorkspace_composerMain input {
+    width: 100%;
+    border: none;
+    outline: none;
+    background: none;
+    font: 300 12.5px var(--jv-sans);
+    color: var(--jv-body);
+
+    &::placeholder { color: var(--jv-muted); }
+}
+
+.mx_NivrisWorkspace_quickActions { display: flex; gap: 7px; flex-shrink: 0; }
+.mx_NivrisWorkspace_quickActions button {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    border: 1px solid var(--jv-border-strong);
+    background: none;
+    border-radius: 4px;
+    padding: 0 9px;
+    height: 28px;
+    font: 500 10px var(--jv-mono);
+    color: var(--jv-muted);
+    cursor: pointer;
+    white-space: nowrap;
+}
+.mx_NivrisWorkspace_quickActions button:hover { background-color: var(--jv-teal-wash); }
+
+.mx_NivrisWorkspace_composerHint { margin-top: 7px; font: 400 11px var(--jv-sans); color: var(--jv-danger); }
+
+/* ---- Entity picker dropdown ---- */
+
+.mx_NivrisEntityPicker {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 0;
+    right: 0;
+    max-height: 220px;
+    overflow-y: auto;
+    background-color: var(--jv-surface);
+    border: 1px solid var(--jv-border-strong);
+    border-radius: 6px;
+    box-shadow: 0 18px 50px rgb(11 27 38 / 10%);
+    padding: 4px;
+    z-index: 10;
+}
+
+.mx_NivrisEntityPicker_item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    font: 400 13px var(--jv-sans);
+    color: var(--jv-ink);
+}
+.mx_NivrisEntityPicker_item_highlighted { background-color: var(--jv-teal-wash); }
+
+.mx_NivrisEntityPicker_name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mx_NivrisEntityPicker_kind { color: var(--jv-muted); display: flex; align-items: center; flex-shrink: 0; }
+
+/* ---- Settings panel ---- */
+
+.mx_NivrisWorkspace_settings { max-width: 420px; display: flex; flex-direction: column; gap: 16px; padding-bottom: 20px; }
+.mx_NivrisWorkspace_settingsField { display: flex; flex-direction: column; gap: 8px; }
+.mx_NivrisWorkspace_settingsLabel { font: 500 9.5px var(--jv-mono); color: var(--jv-label); letter-spacing: 0.1em; }
+.mx_NivrisWorkspace_settingsInput {
+    height: 34px;
+    border: 1px solid var(--jv-border-strong);
+    border-radius: 4px;
+    padding: 0 11px;
+    font: 400 11px var(--jv-mono);
+    color: var(--jv-body);
+    background-color: var(--jv-surface);
+    outline: none;
+}
+.mx_NivrisWorkspace_settingsInput:focus { border-color: var(--jv-teal); }
+.mx_NivrisWorkspace_settingsSave {
+    align-self: flex-start;
+    height: 34px;
+    padding: 0 16px;
+    border: none;
+    border-radius: 4px;
+    background-color: var(--jv-teal);
+    color: #fff;
+    font: 500 11px var(--jv-mono);
+    letter-spacing: 0.04em;
+    cursor: pointer;
+}
+.mx_NivrisWorkspace_settingsSave:hover { background-color: #086361; }
+.mx_NivrisWorkspace_settingsSavedNote { font: 400 10.5px var(--jv-mono); color: var(--jv-teal); }
+.mx_NivrisWorkspace_storageStats { display: flex; gap: 10px; margin-top: 9px; }
+.mx_NivrisWorkspace_storageActions { display: flex; align-items: center; gap: 10px; margin-top: 9px; }
+.mx_NivrisWorkspace_storageSecondaryBtn,
+.mx_NivrisWorkspace_storageDangerBtn {
+    height: 32px;
+    padding: 0 12px;
+    border-radius: 4px;
+    font: 500 10px var(--jv-mono);
+    cursor: pointer;
+}
+.mx_NivrisWorkspace_storageSecondaryBtn {
+    border: 1px solid var(--jv-border-strong);
+    background: none;
+    color: var(--jv-muted);
+}
+.mx_NivrisWorkspace_storageSecondaryBtn:hover { background-color: var(--jv-teal-wash); }
+.mx_NivrisWorkspace_storageDangerBtn {
+    border: 1px solid rgb(196 68 63 / 30%);
+    background: none;
+    color: var(--jv-danger);
+}
+.mx_NivrisWorkspace_storageDangerBtn:hover { background-color: rgb(196 68 63 / 6%); }
+
+.mx_NivrisWorkspace_settingsNote {
+    margin-top: auto;
+    border-top: 1px solid var(--jv-border);
+    padding-top: 12px;
+    font: 400 9.5px/1.7 var(--jv-mono);
+    color: var(--jv-muted);
+}
+
+/* ---- Home overview ---- */
+
+.mx_NivrisWorkspace_home { flex: 1; min-height: 0; display: flex; gap: 24px; padding-bottom: 16px; }
+
+.mx_NivrisWorkspace_homeStatus {
+    width: 250px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.mx_NivrisWorkspace_homeHero {
+    border: 1px solid var(--jv-border-strong);
+    border-radius: 5px;
+    padding: 14px 15px 12px;
+    background: linear-gradient(180deg, var(--jv-teal-wash), transparent);
+}
+.mx_NivrisWorkspace_homeHeroLabel { font: 400 10px var(--jv-mono); color: var(--jv-muted); letter-spacing: 0.06em; }
+.mx_NivrisWorkspace_homeHeroRow { margin-top: 5px; display: flex; align-items: baseline; gap: 8px; }
+.mx_NivrisWorkspace_homeHeroNum { font: 600 34px var(--jv-mono); color: var(--jv-teal); line-height: 1; }
+.mx_NivrisWorkspace_homeHeroSub { font: 300 11px var(--jv-sans); color: var(--jv-muted); }
+
+.mx_NivrisWorkspace_homeMiniStats { display: flex; gap: 10px; }
+.mx_NivrisWorkspace_homeMiniStat {
+    flex: 1;
+    border: 1px solid var(--jv-border);
+    border-radius: 5px;
+    padding: 10px 11px;
+}
+.mx_NivrisWorkspace_homeMiniStat_warn { border-color: rgb(201 122 34 / 22%); background-color: var(--jv-amber-wash); }
+.mx_NivrisWorkspace_homeMiniStat_warn .mx_NivrisWorkspace_statLabel { color: var(--jv-amber-text); }
+.mx_NivrisWorkspace_homeMiniNum { margin-top: 4px; font: 600 22px var(--jv-mono); color: var(--jv-ink); }
+.mx_NivrisWorkspace_homeMiniStat_warn .mx_NivrisWorkspace_homeMiniNum { color: var(--jv-amber); }
+
+.mx_NivrisWorkspace_homeSessionList { display: flex; flex-direction: column; gap: 7px; overflow-y: auto; }
+.mx_NivrisWorkspace_homeSessionRow {
+    appearance: none;
+    text-align: left;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 11px;
+    border: 1px solid var(--jv-border);
+    border-radius: 4px;
+    background: none;
+    cursor: pointer;
+}
+.mx_NivrisWorkspace_homeSessionRow:hover { background-color: var(--jv-teal-wash); }
+.mx_NivrisWorkspace_homeSessionName { flex: 1; min-width: 0; font: 400 12px var(--jv-sans); color: var(--jv-body); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.mx_NivrisWorkspace_homeFootnote { margin-top: auto; font: 400 10px/1.7 var(--jv-mono); color: var(--jv-muted); }
+
+.mx_NivrisWorkspace_homeCenter { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 20px; overflow-y: auto; }
+.mx_NivrisWorkspace_homeChartSub { margin-top: 5px; font: 300 12px var(--jv-sans); color: var(--jv-muted); }
+
+.mx_NivrisWorkspace_homeChart { flex-shrink: 0; height: 150px; display: flex; align-items: flex-end; gap: 4px; }
+.mx_NivrisWorkspace_homeChartCol { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; gap: 4px; position: relative; }
+.mx_NivrisWorkspace_homeChartBar { width: 100%; max-width: 10px; border-radius: 2px 2px 0 0; background-color: var(--jv-cyan); min-height: 1px; }
+.mx_NivrisWorkspace_homeChartBar_mention { background-color: var(--jv-amber); position: absolute; bottom: 0; z-index: 1; }
+.mx_NivrisWorkspace_homeChartLabel { position: absolute; bottom: -16px; font: 400 8.5px var(--jv-mono); color: var(--jv-muted); }
+
+.mx_NivrisWorkspace_homeSplit { flex: 1; min-height: 0; display: flex; gap: 26px; margin-top: 12px; }
+.mx_NivrisWorkspace_homeSplit > div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 9px; overflow-y: auto; }
+.mx_NivrisWorkspace_homeWaiters { max-width: 260px; }
+
+.mx_NivrisWorkspace_homeWaiterRow { display: flex; align-items: center; gap: 10px; }
+.mx_NivrisWorkspace_homeWaiterInitial {
+    width: 26px;
+    height: 26px;
+    flex-shrink: 0;
+    border-radius: 4px;
+    border: 1px solid var(--jv-border-strong);
+    background-color: var(--jv-teal-wash);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font: 500 10px var(--jv-mono);
+    color: var(--jv-teal);
+}
+.mx_NivrisWorkspace_homeWaiterName { flex: 1; min-width: 0; font: 400 11.5px var(--jv-sans); color: var(--jv-body); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mx_NivrisWorkspace_homeWaiterAgo { font: 400 9.5px var(--jv-mono); color: var(--jv-muted); flex-shrink: 0; }
+.mx_NivrisWorkspace_homeWaiterAgo_warn { color: var(--jv-amber); }
+
+/* ---- Session inspector (right panel) ---- */
+
+.mx_NivrisWorkspace_inspector {
+    width: 320px;
+    flex-shrink: 0;
+    border-left: 1px solid var(--jv-border);
+    background-color: var(--jv-surface-alt);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.mx_NivrisWorkspace_inspectorTabs {
+    flex-shrink: 0;
+    display: flex;
+    border-bottom: 1px solid var(--jv-border);
+}
+.mx_NivrisWorkspace_inspectorTab {
+    flex: 1;
+    appearance: none;
+    border: none;
+    background: none;
+    height: 38px;
+    font: 500 9.5px var(--jv-mono);
+    letter-spacing: 0.04em;
+    color: var(--jv-muted);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+}
+.mx_NivrisWorkspace_inspectorTab:hover { color: var(--jv-body); }
+.mx_NivrisWorkspace_inspectorTab_active { color: var(--jv-teal); border-bottom-color: var(--jv-teal); }
+
+.mx_NivrisWorkspace_threadBadge {
+    padding: 2px 6px;
+    border-radius: 2px;
+    background-color: rgb(15 163 160 / 12%);
+    color: var(--jv-teal);
+    font: 600 8.5px var(--jv-mono);
+}
+.mx_NivrisWorkspace_threadBadge_none { background-color: rgb(108 92 255 / 12%); color: #4b3ecf; }
+
+.mx_NivrisWorkspace_inspectorBreadcrumb {
+    flex-shrink: 0;
+    padding: 12px 14px 0;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    font: 400 10px var(--jv-mono);
+    color: var(--jv-label);
+}
+
+.mx_NivrisWorkspace_distList { display: flex; flex-direction: column; gap: 8px; margin-top: 9px; }
+
+.mx_NivrisWorkspace_inspectorBody {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.mx_NivrisWorkspace_msgCard {
+    border: 1px solid var(--jv-border-strong);
+    border-radius: 5px;
+    padding: 12px 13px;
+    background-color: var(--jv-surface);
+}
+.mx_NivrisWorkspace_msgCardHead { display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; }
+.mx_NivrisWorkspace_msgCardWho { font: 500 12.5px var(--jv-sans); color: var(--jv-ink); }
+.mx_NivrisWorkspace_msgCardTime { font: 400 9.5px var(--jv-mono); color: var(--jv-label); }
+.mx_NivrisWorkspace_msgCardText { margin-top: 6px; font: 300 12.5px/1.55 var(--jv-sans); color: var(--jv-body); white-space: pre-wrap; }
+
+.mx_NivrisWorkspace_inspectorNote {
+    border: 1px solid var(--jv-border-strong);
+    border-radius: 5px;
+    padding: 10px 11px;
+    font: 300 11.5px/1.5 var(--jv-sans);
+    color: var(--jv-muted);
+}
+
+.mx_NivrisWorkspace_inspectorFieldLabel { font: 500 9px var(--jv-mono); color: var(--jv-label); letter-spacing: 0.1em; }
+.mx_NivrisWorkspace_inspectorFieldValue { margin: 4px 0 4px; font: 500 13px var(--jv-sans); color: var(--jv-ink); }
+.mx_NivrisWorkspace_inspectorHint { margin-top: 10px; font: 400 11px/1.6 var(--jv-sans); color: var(--jv-muted); }
+
+.mx_NivrisWorkspace_inspectorFoot { flex-shrink: 0; padding: 12px 14px 16px; border-top: 1px solid var(--jv-border); }
+
+.mx_NivrisWorkspace_inspectorPrimary {
+    width: 100%;
+    height: 34px;
+    border: none;
+    border-radius: 4px;
+    background-color: var(--jv-teal);
+    color: #fff;
+    font: 500 10.5px var(--jv-mono);
+    letter-spacing: 0.04em;
+    cursor: pointer;
+}
+.mx_NivrisWorkspace_inspectorPrimary:hover { background-color: #086361; }
+
+@media (max-width: 900px) {
+    .mx_NivrisWorkspace_sidebar { width: 210px; }
+    .mx_NivrisWorkspace_statRow { display: none; }
+    .mx_NivrisWorkspace_inspector { display: none; }
+}

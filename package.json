@@ -1,0 +1,30 @@
+{
+    "name": "@element-hq/element-web-module-nivris",
+    "private": true,
+    "version": "1.0.0",
+    "type": "module",
+    "main": "lib/index.js",
+    "license": "SEE LICENSE IN README.md",
+    "scripts": {
+        "build": "nx build",
+        "lint:types": "nx lint:types",
+        "install:live": "node scripts/install-nivris.mjs",
+        "uninstall:live": "node scripts/uninstall-nivris.mjs"
+    },
+    "devDependencies": {
+        "@arcmantle/vite-plugin-import-css-sheet": "^1.0.12",
+        "@element-hq/element-web-module-api": "workspace:*",
+        "@types/node": "catalog:",
+        "@types/react": "catalog:",
+        "@types/react-dom": "catalog:",
+        "@vitejs/plugin-react": "catalog:",
+        "typescript": "catalog:",
+        "vite": "catalog:",
+        "vite-plugin-node-polyfills": "catalog:"
+    },
+    "dependencies": {
+        "@vector-im/compound-design-tokens": "^10.0.0",
+        "@vector-im/compound-web": "^9.0.0",
+        "matrix-js-sdk": "github:matrix-org/matrix-js-sdk#develop"
+    }
+}
