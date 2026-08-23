@@ -6,28 +6,42 @@ Please see LICENSE files in the repository root for full details.
 */
 
 import { fileURLToPath } from "node:url";
-import { mergeConfig } from "vite";
+import { defineConfig, esmExternalRequirePlugin } from "vite";
 import react from "@vitejs/plugin-react";
 import { nodePolyfills } from "vite-plugin-node-polyfills";
 import { importCSSSheet } from "@arcmantle/vite-plugin-import-css-sheet";
-import baseConfig from "@element-hq/element-web-module-api/vite.base.ts";
+import externalGlobals from "rollup-plugin-external-globals";
 
-export default mergeConfig(baseConfig, {
+// Inlined from @element-hq/element-web-module-api/vite.base.ts rather than imported: Node's
+// native TS type-stripping refuses to load a .ts file that lives under node_modules, which broke
+// `vite build` for this module once it moved out of the element-web pnpm workspace (where vite's
+// own config bundler, not Node's loader, was handling it).
+export default defineConfig({
     build: {
+        outDir: "lib",
+        target: "esnext",
+        sourcemap: true,
         lib: {
             entry: fileURLToPath(import.meta.resolve("./src/index.tsx")),
             name: "element-web-module-nivris",
             fileName: "index",
             formats: ["es"],
         },
+        rolldownOptions: {
+            plugins: [esmExternalRequirePlugin({ external: ["react"] })],
+            output: { globals: { react: "window.React" } },
+        },
     },
     plugins: [
         importCSSSheet(),
-        // Classic runtime (React.createElement) avoids importing "react/jsx-runtime", which the
-        // base config doesn't externalize (only "react" itself maps to window.React).
+        // Classic runtime (React.createElement) avoids importing "react/jsx-runtime", which isn't
+        // externalized (only "react" itself maps to window.React).
         react({ jsxRuntime: "classic" }),
-        nodePolyfills({
-            include: ["events"],
-        }),
+        nodePolyfills({ include: ["events"] }),
+        externalGlobals({ react: "window.React" }),
     ],
+    define: {
+        "process.env.NODE_ENV": "'production'",
+        process: { env: { NODE_ENV: "production" } },
+    },
 });

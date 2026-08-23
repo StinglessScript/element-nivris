@@ -1,8 +1,18 @@
 {
-    "extends": "../tsconfig.json",
+    "$schema": "http://json.schemastore.org/tsconfig",
     "compilerOptions": {
-        "noEmit": true,
-        "jsx": "react-jsx"
+        "target": "es2022",
+        "jsx": "react-jsx",
+        "lib": ["ESNext", "dom", "dom.iterable"],
+        "types": ["node"],
+        "resolveJsonModule": true,
+        "esModuleInterop": true,
+        "moduleResolution": "bundler",
+        "module": "ESNext",
+        "allowImportingTsExtensions": true,
+        "skipLibCheck": true,
+        "strict": true,
+        "noEmit": true
     },
     "include": ["src"]
 }
