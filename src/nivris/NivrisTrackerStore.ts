@@ -25,6 +25,17 @@ export interface NivrisUserTracker {
     /** Cached AI-generated insights for this tracker, filled in on demand (not automatically). */
     insights?: string[];
     insightsGeneratedAt?: number;
+    /** Free-form Q&A chat about this tracker's messages, persisted per-tracker like insights. */
+    chatMessages?: NivrisChatMessage[];
+    /** Timestamp of the last time this tracker's feed was viewed — messages newer than this count
+     * as unread. Updated whenever the tracker becomes the active session. */
+    lastSeenTs?: number;
+}
+
+export interface NivrisChatMessage {
+    role: "user" | "assistant";
+    content: string;
+    ts: number;
 }
 
 const STORAGE_KEY = "mx_nivris_trackers";
@@ -86,6 +97,10 @@ class NivrisTrackerStore extends EventEmitter {
     public setActive(id: string | null): void {
         if (this.activeId === id) return;
         this.activeId = id;
+        if (id) {
+            this.trackers = this.trackers.map((t) => (t.id === id ? { ...t, lastSeenTs: Date.now() } : t));
+            save(this.trackers);
+        }
         this.emit(NIVRIS_TRACKER_STORE_CHANGE_EVENT);
     }
 
@@ -118,6 +133,20 @@ class NivrisTrackerStore extends EventEmitter {
 
     public setInsights(id: string, insights: string[]): void {
         this.trackers = this.trackers.map((t) => (t.id === id ? { ...t, insights, insightsGeneratedAt: Date.now() } : t));
+        save(this.trackers);
+        this.emit(NIVRIS_TRACKER_STORE_CHANGE_EVENT);
+    }
+
+    public appendChatMessages(id: string, newMessages: NivrisChatMessage[]): void {
+        this.trackers = this.trackers.map((t) =>
+            t.id === id ? { ...t, chatMessages: [...(t.chatMessages ?? []), ...newMessages] } : t,
+        );
+        save(this.trackers);
+        this.emit(NIVRIS_TRACKER_STORE_CHANGE_EVENT);
+    }
+
+    public clearChat(id: string): void {
+        this.trackers = this.trackers.map((t) => (t.id === id ? { ...t, chatMessages: [] } : t));
         save(this.trackers);
         this.emit(NIVRIS_TRACKER_STORE_CHANGE_EVENT);
     }

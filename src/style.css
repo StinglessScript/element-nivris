@@ -239,6 +239,15 @@ Please see LICENSE files in the repository root for full details.
     color: var(--jv-muted);
 }
 
+.mx_NivrisWorkspace_sidebar .mx_NivrisWorkspace_composerWrap {
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.mx_NivrisWorkspace_sidebar .mx_NivrisWorkspace_composer { height: 38px; }
+.mx_NivrisWorkspace_sidebar .mx_NivrisWorkspace_quickActions { flex-wrap: wrap; }
+
 .mx_NivrisWorkspace_sidebarFoot {
     padding: 10px 14px;
     border-top: 1px solid var(--jv-border);
@@ -566,6 +575,78 @@ Please see LICENSE files in the repository root for full details.
 .mx_NivrisWorkspace_quickActions button:hover { background-color: var(--jv-teal-wash); }
 
 .mx_NivrisWorkspace_composerHint { margin-top: 7px; font: 400 11px var(--jv-sans); color: var(--jv-danger); }
+
+/* ---- Chat ---- */
+
+.mx_NivrisWorkspace_chatMessages {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.mx_NivrisWorkspace_chatBubble {
+    max-width: 92%;
+    padding: 8px 11px;
+    border-radius: 10px;
+    font: 400 12px/1.5 var(--jv-sans);
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+.mx_NivrisWorkspace_chatBubble_user {
+    align-self: flex-end;
+    background-color: var(--jv-teal);
+    color: #fff;
+    border-bottom-right-radius: 3px;
+}
+.mx_NivrisWorkspace_chatBubble_assistant {
+    align-self: flex-start;
+    background-color: var(--jv-surface);
+    border: 1px solid var(--jv-border);
+    color: var(--jv-body);
+    border-bottom-left-radius: 3px;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+}
+
+.mx_NivrisWorkspace_chatComposer {
+    flex-shrink: 0;
+    display: flex;
+    gap: 8px;
+    padding: 10px 12px;
+    border-top: 1px solid var(--jv-border);
+    align-items: flex-end;
+
+    textarea {
+        flex: 1;
+        resize: none;
+        border: 1px solid var(--jv-border-strong);
+        border-radius: 5px;
+        padding: 7px 9px;
+        font: 400 12px var(--jv-sans);
+        color: var(--jv-body);
+        background-color: var(--jv-surface);
+        outline: none;
+
+        &:focus { border-color: var(--jv-teal); }
+        &::placeholder { color: var(--jv-muted); }
+    }
+}
+
+.mx_NivrisWorkspace_aiCardPreview {
+    flex: 1;
+    min-width: 0;
+    font: 400 11px var(--jv-sans);
+    color: var(--jv-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.mx_NivrisWorkspace_aiCardChevron { color: var(--jv-muted); font-size: 11px; flex-shrink: 0; }
 
 /* ---- Entity picker dropdown ---- */
 

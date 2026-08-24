@@ -20,6 +20,8 @@ import {
 
 import { getMatrixClient } from "../matrixClient";
 import { getMeta, putMessage, putMessages, pruneOlderThan, setMeta, type StoredNivrisMessage } from "./NivrisMessageDb";
+import NivrisTrackerStore, { type NivrisUserTracker } from "./NivrisTrackerStore";
+import { PRIORITY_KEYWORDS } from "./constants";
 
 const RETENTION_DAYS = 7;
 const MAX_BACKFILL_PAGES_PER_ROOM = 10;
@@ -52,16 +54,20 @@ export function startOfToday(): number {
 
 const SETTINGS_STORAGE_KEY = "mx_nivris_assistant_settings";
 
-/** Reads ignoredRoomIds straight from localStorage — ingest runs outside React, no settings prop to pass in. */
-function isRoomIgnored(roomId: string): boolean {
+/** Reads NivrisSettings straight from localStorage — ingest runs outside React, no settings prop
+ * to pass in (and pulling in useLocalStorageState's React hook here would be a layering issue). */
+function readSettings(): Record<string, unknown> {
     try {
         const raw = window.localStorage.getItem(SETTINGS_STORAGE_KEY);
-        if (!raw) return false;
-        const ignored = JSON.parse(raw)?.ignoredRoomIds;
-        return Array.isArray(ignored) && ignored.includes(roomId);
+        return raw ? JSON.parse(raw) : {};
     } catch {
-        return false;
+        return {};
     }
+}
+
+function isRoomIgnored(roomId: string): boolean {
+    const ignored = readSettings().ignoredRoomIds;
+    return Array.isArray(ignored) && ignored.includes(roomId);
 }
 
 function escapeRegExp(s: string): string {
@@ -109,6 +115,43 @@ function toRecord(event: MatrixEvent, room: Room, client: MatrixClient): StoredN
     };
 }
 
+/** Which tracker(s) a freshly-arrived message matches, for the desktop notification — same rules
+ * as computeTrackerInsights' findMatches, but against a single new record instead of the whole
+ * cache, so a notification can fire the instant a live message lands. */
+function matchingTrackers(record: StoredNivrisMessage, trackers: NivrisUserTracker[]): NivrisUserTracker[] {
+    const lowerBody = record.body.toLowerCase();
+    return trackers.filter((t) => {
+        switch (t.type) {
+            case "mention":
+                return record.mentionsMe;
+            case "priority":
+                return PRIORITY_KEYWORDS.some((k) => lowerBody.includes(k));
+            case "boss":
+                return t.targetId ? t.targetId === record.sender : lowerBody.includes(t.label.toLowerCase());
+            case "group":
+                return t.targetId
+                    ? t.targetId === record.roomId
+                    : record.roomName.toLowerCase().includes(t.label.toLowerCase());
+        }
+    });
+}
+
+function maybeNotify(record: StoredNivrisMessage, myUserId: string | null): void {
+    if (record.sender === myUserId) return;
+    if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+    if (readSettings().notificationsEnabled === false) return;
+
+    const matched = matchingTrackers(record, NivrisTrackerStore.instance.getTrackers());
+    if (!matched.length) return;
+
+    const title = matched.some((t) => t.type === "mention") ? "N.I.V.R.I.S. — Bạn được nhắc tới" : `N.I.V.R.I.S. — ${record.senderName}`;
+    const notification = new Notification(title, {
+        body: `(${record.roomName}) ${record.senderName}: ${record.body}`,
+        tag: record.id,
+    });
+    notification.onclick = () => NivrisTrackerStore.instance.setActive(matched[0].id);
+}
+
 // The key needed to decrypt a backfilled/live event sometimes arrives (key backup, to-device)
 // after our one-shot decryptEventIfNeeded already gave up — retry once it actually decrypts,
 // otherwise that message is silently missing from the cache forever.
@@ -116,7 +159,10 @@ function scheduleRetryOnDecrypt(event: MatrixEvent, room: Room, client: MatrixCl
     if (!event.isDecryptionFailure()) return;
     event.once(MatrixEventEvent.Decrypted, () => {
         const record = toRecord(event, room, client);
-        if (record) void putMessage(record);
+        if (record) {
+            void putMessage(record);
+            maybeNotify(record, client.getUserId());
+        }
     });
 }
 
@@ -140,6 +186,7 @@ const onRoomTimeline = async (
     const record = toRecord(event, room, client);
     if (record) {
         await putMessage(record);
+        maybeNotify(record, client.getUserId());
     } else {
         scheduleRetryOnDecrypt(event, room, client);
     }
@@ -276,6 +323,10 @@ export async function ensureNivrisIngestStarted(): Promise<void> {
 
     const client = getMatrixClient();
     client.on(RoomEvent.Timeline, onRoomTimeline);
+
+    if (typeof Notification !== "undefined" && Notification.permission === "default") {
+        void Notification.requestPermission();
+    }
 
     void pruneOlderThan(Date.now() - RETENTION_DAYS * 24 * 60 * 60 * 1000);
 

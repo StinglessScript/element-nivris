@@ -9,10 +9,10 @@ import { getMatrixClient } from "../matrixClient";
 import { getMentions, getMessagesSince, searchMessages, type StoredNivrisMessage } from "./NivrisMessageDb";
 import { askNivris, NivrisApiError, type NivrisMessage } from "./NivrisApi";
 import { type NivrisSettings } from "./types";
-import { type NivrisUserTracker } from "./NivrisTrackerStore";
+import { type NivrisChatMessage, type NivrisUserTracker } from "./NivrisTrackerStore";
 import { startOfToday } from "./NivrisIngest";
+import { PRIORITY_KEYWORDS } from "./constants";
 
-const PRIORITY_KEYWORDS = ["gấp", "khẩn", "deadline", "ưu tiên", "asap", "urgent", "quan trọng"];
 const MAX_MATCHES = 200;
 const MAX_ITEMS_PER_ROOM = 15;
 const MAX_INSIGHT_INPUT_MESSAGES = 120;
@@ -54,6 +54,8 @@ export interface TrackerMetrics {
     total: number;
     roomsCount: number;
     awaitingReply: number;
+    /** Messages from others, newer than the tracker's lastSeenTs (i.e. since it was last opened). */
+    unreadCount: number;
     lastActivityTs: number | null;
     priorities: TrackerPriorityItem[];
     teamWeights: TrackerTeamWeight[];
@@ -65,6 +67,7 @@ const EMPTY_METRICS: TrackerMetrics = {
     total: 0,
     roomsCount: 0,
     awaitingReply: 0,
+    unreadCount: 0,
     lastActivityTs: null,
     priorities: [],
     teamWeights: [],
@@ -124,6 +127,9 @@ export async function computeTrackerMetrics(tracker: NivrisUserTracker): Promise
     }
     const awaitingReply = Array.from(latestByRoom.values()).filter((m) => m.sender !== myUserId).length;
 
+    const lastSeenTs = tracker.lastSeenTs ?? 0;
+    const unreadCount = matches.filter((m) => m.ts > lastSeenTs && m.sender !== myUserId).length;
+
     const recent = [...matches].sort((a, b) => b.ts - a.ts).slice(0, 4);
     const priorities: TrackerPriorityItem[] = recent.map((m, i) => ({
         color: PRIORITY_COLORS[i % PRIORITY_COLORS.length],
@@ -144,7 +150,7 @@ export async function computeTrackerMetrics(tracker: NivrisUserTracker): Promise
         .map((r) => ({ label: r.name, percent: Math.round((r.count / matches.length) * 100) }));
 
     // Every matched message, grouped by room so a session with several rooms stays readable —
-    // busiest room first, newest message first within each room.
+    // most recently active room first, newest message first within each room.
     const byRoom = new Map<string, StoredNivrisMessage[]>();
     for (const m of matches) {
         const list = byRoom.get(m.roomId) ?? [];
@@ -152,7 +158,7 @@ export async function computeTrackerMetrics(tracker: NivrisUserTracker): Promise
         byRoom.set(m.roomId, list);
     }
     const feedGroups: TrackerFeedGroup[] = Array.from(byRoom.entries())
-        .sort((a, b) => b[1].length - a[1].length)
+        .sort((a, b) => Math.max(...b[1].map((m) => m.ts)) - Math.max(...a[1].map((m) => m.ts)))
         .map(([roomId, roomMatches], i) => ({
             roomId,
             roomName: roomMatches[0].roomName,
@@ -173,6 +179,7 @@ export async function computeTrackerMetrics(tracker: NivrisUserTracker): Promise
         total: matches.length,
         roomsCount: roomIds.size,
         awaitingReply,
+        unreadCount,
         lastActivityTs: recent[0]?.ts ?? null,
         priorities,
         teamWeights,
@@ -220,6 +227,48 @@ export async function generateTrackerInsights(
             .slice(0, 8);
     } catch (e) {
         return [e instanceof NivrisApiError ? e.message : `Lỗi khi phân tích: ${e instanceof Error ? e.message : String(e)}`];
+    }
+}
+
+const MAX_CHAT_HISTORY_TURNS = 20;
+
+/**
+ * Answers a free-form question about this tracker, grounded in its matched messages plus the
+ * running chat history (so follow-up questions have context). Same transcript-building approach
+ * as generateTrackerInsights, but conversational instead of a one-shot bullet summary.
+ */
+export async function askTrackerQuestion(
+    tracker: NivrisUserTracker,
+    settings: NivrisSettings,
+    matches: StoredNivrisMessage[],
+    priorChat: NivrisChatMessage[],
+    question: string,
+): Promise<string> {
+    const transcript = matches.length
+        ? matches
+              .slice(0, MAX_INSIGHT_INPUT_MESSAGES)
+              .slice()
+              .reverse()
+              .map((m) => `[${new Date(m.ts).toLocaleString("vi-VN")}] (${m.roomName}) ${m.senderName}: ${m.body}`)
+              .join("\n")
+        : "(chưa có tin nhắn nào khớp với tracker này trong bộ nhớ đệm)";
+
+    const systemPrompt = [
+        `Bạn là trợ lý N.I.V.R.I.S. đang trò chuyện với người dùng về tracker "${tracker.label || tracker.type}".`,
+        "Trả lời dựa trên transcript tin nhắn bên dưới. Nếu câu hỏi cần thông tin không có trong transcript, nói rõ là không có đủ dữ liệu — không bịa.",
+        "Trả lời ngắn gọn, tự nhiên bằng tiếng Việt, như đang nhắn tin, không cần mở đầu/kết luận rườm rà.",
+        `Transcript:\n${transcript}`,
+    ].join("\n\n");
+
+    const messages: NivrisMessage[] = [
+        ...priorChat.slice(-MAX_CHAT_HISTORY_TURNS).map((m): NivrisMessage => ({ role: m.role, content: m.content })),
+        { role: "user", content: question },
+    ];
+
+    try {
+        return await askNivris(settings, systemPrompt, messages);
+    } catch (e) {
+        return e instanceof NivrisApiError ? e.message : `Lỗi: ${e instanceof Error ? e.message : String(e)}`;
     }
 }
 

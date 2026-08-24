@@ -20,10 +20,12 @@ import { useLocalStorageState } from "../useLocalStorageState";
 import { DEFAULT_NIVRIS_SETTINGS, isNivrisConfigured, type NivrisSettings } from "../nivris/types";
 import NivrisTrackerStore, {
     NIVRIS_TRACKER_STORE_CHANGE_EVENT,
+    type NivrisChatMessage,
     type NivrisTrackerType,
     type NivrisUserTracker,
 } from "../nivris/NivrisTrackerStore";
 import {
+    askTrackerQuestion,
     computeHomeOverview,
     computeTrackerMetrics,
     generateTrackerInsights,
@@ -83,8 +85,12 @@ const NivrisWorkspace: React.FC = () => {
     const [search, setSearch] = useState("");
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [selectedMessage, setSelectedMessage] = useState<StoredNivrisMessage | null>(null);
-    const [inspectorTab, setInspectorTab] = useState<"message" | "info">("info");
+    const [inspectorTab, setInspectorTab] = useState<"message" | "info" | "chat">("info");
     const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
+    const [summaryOpen, setSummaryOpen] = useState(false);
+    const [chatInput, setChatInput] = useState("");
+    const [chatSending, setChatSending] = useState(false);
+    const chatEndRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
@@ -102,6 +108,7 @@ const NivrisWorkspace: React.FC = () => {
     useEffect(() => {
         setSelectedMessage(null);
         setInspectorTab("info");
+        setSummaryOpen(false);
     }, [activeId]);
 
     // Recomputed whenever the tracker list changes AND on a short poll, since new messages land in
@@ -164,6 +171,31 @@ const NivrisWorkspace: React.FC = () => {
             setAnalyzing(false);
         }
     };
+
+    const onSendChat = async (): Promise<void> => {
+        const question = chatInput.trim();
+        if (!question || !activeTracker || chatSending) return;
+        if (!isNivrisConfigured(settings)) {
+            setSettingsOpen(true);
+            setHint("Cần cấu hình API AI trước khi trò chuyện.");
+            return;
+        }
+
+        const priorChat = activeTracker.chatMessages ?? [];
+        NivrisTrackerStore.instance.appendChatMessages(activeTracker.id, [{ role: "user", content: question, ts: Date.now() }]);
+        setChatInput("");
+        setChatSending(true);
+        try {
+            const answer = await askTrackerQuestion(activeTracker, settings, activeMetrics?.matches ?? [], priorChat, question);
+            NivrisTrackerStore.instance.appendChatMessages(activeTracker.id, [{ role: "assistant", content: answer, ts: Date.now() }]);
+        } finally {
+            setChatSending(false);
+        }
+    };
+
+    useEffect(() => {
+        chatEndRef.current?.scrollIntoView({ block: "end" });
+    }, [activeTracker?.chatMessages, chatSending]);
 
     const filteredTrackers = trackers.filter((t) => trackerTitle(t).toLowerCase().includes(search.trim().toLowerCase()));
     const groupOrder = ["CỐ ĐỊNH", "NGƯỜI", "PHÒNG"];
@@ -231,14 +263,44 @@ const NivrisWorkspace: React.FC = () => {
                                                     {metrics === undefined ? "đang tính…" : `${metrics.total} tin · ${metrics.roomsCount} phòng`}
                                                 </div>
                                             </span>
-                                            {!!metrics?.awaitingReply && (
-                                                <span className="mx_NivrisWorkspace_sessionBadge">{metrics.awaitingReply}</span>
+                                            {!!metrics?.unreadCount && (
+                                                <span className="mx_NivrisWorkspace_sessionBadge" title="Tin nhắn mới chưa xem">
+                                                    {metrics.unreadCount}
+                                                </span>
                                             )}
                                         </button>
                                     );
                                 })}
                             </div>
                         ))}
+                    </div>
+                    <div className="mx_NivrisWorkspace_composerWrap">
+                        <div className="mx_NivrisWorkspace_composer">
+                            <span className="mx_NivrisWorkspace_composerPrompt">&gt;</span>
+                            <div className="mx_NivrisWorkspace_composerMain">
+                                <input
+                                    ref={inputRef}
+                                    placeholder="Gõ @tên người hoặc tên nhóm để thêm session..."
+                                    value={input}
+                                    onChange={(e) => {
+                                        setInput(e.target.value);
+                                        setPickerOpen(e.target.value.trim().length > 0);
+                                        setHint(null);
+                                    }}
+                                    onFocus={() => input.trim() && setPickerOpen(true)}
+                                    onBlur={() => window.setTimeout(() => setPickerOpen(false), 100)}
+                                />
+                                {pickerOpen && <NivrisEntityPicker query={input} onSelect={onPickEntity} />}
+                            </div>
+                        </div>
+                        <div className="mx_NivrisWorkspace_quickActions">
+                            <button onClick={() => onCreateFixed("mention")}>
+                                <MentionIcon width="11px" height="11px" /> @ MENTION
+                            </button>
+                            <button onClick={() => onCreateFixed("priority")}>
+                                <FavouriteSolidIcon width="11px" height="11px" /> ƯU TIÊN
+                            </button>
+                        </div>
                     </div>
                     <div className="mx_NivrisWorkspace_sidebarFoot">
                         <i className="mx_NivrisWorkspace_liveDot" style={{ width: 5, height: 5 }} />
@@ -252,6 +314,7 @@ const NivrisWorkspace: React.FC = () => {
                             settings={settings}
                             onSave={(s) => { setSettings(s); setSettingsOpen(false); }}
                             onChangeIgnoredRooms={(ignoredRoomIds) => setSettings({ ...settings, ignoredRoomIds })}
+                            onChangeNotificationsEnabled={(notificationsEnabled) => setSettings({ ...settings, notificationsEnabled })}
                         />
                     ) : (
                         <>
@@ -295,12 +358,24 @@ const NivrisWorkspace: React.FC = () => {
                                 ) : (
                                     <>
                                         <section className="mx_NivrisWorkspace_aiCard">
-                                            <div className="mx_NivrisWorkspace_aiCardHead">
+                                            <div
+                                                className="mx_NivrisWorkspace_aiCardHead"
+                                                onClick={() => setSummaryOpen((v) => !v)}
+                                                style={{ cursor: "pointer" }}
+                                            >
                                                 <i className="mx_NivrisWorkspace_liveDot" />
                                                 <span className="mx_NivrisWorkspace_aiCardTitle">TÓM TẮT AI</span>
+                                                {!summaryOpen && activeTracker.insights && (
+                                                    <span className="mx_NivrisWorkspace_aiCardPreview">{activeTracker.insights[0]}</span>
+                                                )}
+                                                <span className="mx_NivrisWorkspace_aiCardChevron">{summaryOpen ? "▾" : "▸"}</span>
                                                 <button
                                                     className="mx_NivrisWorkspace_aiCardAction"
-                                                    onClick={onAnalyze}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setSummaryOpen(true);
+                                                        void onAnalyze();
+                                                    }}
                                                     disabled={analyzing || !activeMetrics || activeMetrics.total === 0}
                                                 >
                                                     {analyzing ? (
@@ -311,6 +386,7 @@ const NivrisWorkspace: React.FC = () => {
                                                     {analyzing ? "ĐANG PHÂN TÍCH…" : activeTracker.insights ? "CHẠY LẠI" : "PHÂN TÍCH"}
                                                 </button>
                                             </div>
+                                            {summaryOpen && (
                                             <div className="mx_NivrisWorkspace_aiCardBody">
                                                 {analyzing ? (
                                                     <div className="mx_NivrisWorkspace_aiLoading">
@@ -340,6 +416,7 @@ const NivrisWorkspace: React.FC = () => {
                                                     </div>
                                                 )}
                                             </div>
+                                            )}
                                             {hint && !analyzing && <div className="mx_NivrisWorkspace_aiHint">{hint}</div>}
                                         </section>
 
@@ -404,34 +481,6 @@ const NivrisWorkspace: React.FC = () => {
                         </>
                     )}
 
-                    <div className="mx_NivrisWorkspace_composerWrap">
-                        <div className="mx_NivrisWorkspace_composer">
-                            <span className="mx_NivrisWorkspace_composerPrompt">&gt;</span>
-                            <div className="mx_NivrisWorkspace_composerMain">
-                                <input
-                                    ref={inputRef}
-                                    placeholder="Gõ @tên người hoặc tên nhóm để thêm session..."
-                                    value={input}
-                                    onChange={(e) => {
-                                        setInput(e.target.value);
-                                        setPickerOpen(e.target.value.trim().length > 0);
-                                        setHint(null);
-                                    }}
-                                    onFocus={() => input.trim() && setPickerOpen(true)}
-                                    onBlur={() => window.setTimeout(() => setPickerOpen(false), 100)}
-                                />
-                                {pickerOpen && <NivrisEntityPicker query={input} onSelect={onPickEntity} />}
-                            </div>
-                            <div className="mx_NivrisWorkspace_quickActions">
-                                <button onClick={() => onCreateFixed("mention")}>
-                                    <MentionIcon width="11px" height="11px" /> @ MENTION
-                                </button>
-                                <button onClick={() => onCreateFixed("priority")}>
-                                    <FavouriteSolidIcon width="11px" height="11px" /> ƯU TIÊN
-                                </button>
-                            </div>
-                        </div>
-                    </div>
                 </div>
 
                 {activeTracker && !settingsOpen && (
@@ -442,6 +491,11 @@ const NivrisWorkspace: React.FC = () => {
                         tab={inspectorTab}
                         onTabChange={setInspectorTab}
                         onRemoveTracker={() => NivrisTrackerStore.instance.removeTracker(activeTracker.id)}
+                        chatInput={chatInput}
+                        onChatInputChange={setChatInput}
+                        chatSending={chatSending}
+                        onSendChat={onSendChat}
+                        chatEndRef={chatEndRef}
                     />
                 )}
             </div>
@@ -582,15 +636,26 @@ const SessionInspector: React.FC<{
     tracker: NivrisUserTracker;
     metrics: TrackerMetrics | undefined;
     message: StoredNivrisMessage | null;
-    tab: "message" | "info";
-    onTabChange: (tab: "message" | "info") => void;
+    tab: "message" | "info" | "chat";
+    onTabChange: (tab: "message" | "info" | "chat") => void;
     onRemoveTracker: () => void;
-}> = ({ tracker, metrics, message, tab, onTabChange, onRemoveTracker }) => {
+    chatInput: string;
+    onChatInputChange: (v: string) => void;
+    chatSending: boolean;
+    onSendChat: () => void;
+    chatEndRef: React.RefObject<HTMLDivElement | null>;
+}> = ({ tracker, metrics, message, tab, onTabChange, onRemoveTracker, chatInput, onChatInputChange, chatSending, onSendChat, chatEndRef }) => {
     const inThread = !!message?.threadRootId && message.threadRootId !== message.id;
 
     return (
         <aside className="mx_NivrisWorkspace_inspector">
             <div className="mx_NivrisWorkspace_inspectorTabs">
+                <button
+                    className={`mx_NivrisWorkspace_inspectorTab ${tab === "chat" ? "mx_NivrisWorkspace_inspectorTab_active" : ""}`}
+                    onClick={() => onTabChange("chat")}
+                >
+                    TRÒ CHUYỆN
+                </button>
                 <button
                     className={`mx_NivrisWorkspace_inspectorTab ${tab === "message" ? "mx_NivrisWorkspace_inspectorTab_active" : ""}`}
                     onClick={() => onTabChange("message")}
@@ -601,11 +666,54 @@ const SessionInspector: React.FC<{
                     className={`mx_NivrisWorkspace_inspectorTab ${tab === "info" ? "mx_NivrisWorkspace_inspectorTab_active" : ""}`}
                     onClick={() => onTabChange("info")}
                 >
-                    THÔNG TIN SESSION
+                    THÔNG TIN
                 </button>
             </div>
 
-            {tab === "message" ? (
+            {tab === "chat" ? (
+                <>
+                    <div className="mx_NivrisWorkspace_chatMessages">
+                        {(tracker.chatMessages ?? []).length === 0 && !chatSending && (
+                            <div className="mx_NivrisWorkspace_aiEmpty">
+                                Hỏi AI bất cứ điều gì về session này — vd. "Hôm nay có ai nhắc deadline gì không?"
+                            </div>
+                        )}
+                        {(tracker.chatMessages ?? []).map((m, i) => (
+                            <div key={i} className={`mx_NivrisWorkspace_chatBubble mx_NivrisWorkspace_chatBubble_${m.role}`}>
+                                {m.content}
+                            </div>
+                        ))}
+                        {chatSending && (
+                            <div className="mx_NivrisWorkspace_chatBubble mx_NivrisWorkspace_chatBubble_assistant">
+                                <span className="mx_NivrisWorkspace_spinner" /> đang trả lời…
+                            </div>
+                        )}
+                        <div ref={chatEndRef} />
+                    </div>
+                    <div className="mx_NivrisWorkspace_chatComposer">
+                        <textarea
+                            placeholder="Hỏi AI về session này..."
+                            value={chatInput}
+                            onChange={(e) => onChatInputChange(e.target.value)}
+                            onKeyDown={(e) => {
+                                if (e.key === "Enter" && !e.shiftKey) {
+                                    e.preventDefault();
+                                    onSendChat();
+                                }
+                            }}
+                            disabled={chatSending}
+                            rows={2}
+                        />
+                        <button
+                            className="mx_NivrisWorkspace_settingsSave"
+                            onClick={onSendChat}
+                            disabled={chatSending || !chatInput.trim()}
+                        >
+                            GỬI
+                        </button>
+                    </div>
+                </>
+            ) : tab === "message" ? (
                 message ? (
                     <>
                         <div className="mx_NivrisWorkspace_inspectorBreadcrumb">
@@ -692,7 +800,8 @@ const SettingsPanel: React.FC<{
     settings: NivrisSettings;
     onSave: (s: NivrisSettings) => void;
     onChangeIgnoredRooms: (ignoredRoomIds: string[]) => void;
-}> = ({ settings, onSave, onChangeIgnoredRooms }) => {
+    onChangeNotificationsEnabled: (enabled: boolean) => void;
+}> = ({ settings, onSave, onChangeIgnoredRooms, onChangeNotificationsEnabled }) => {
     const [baseUrl, setBaseUrl] = useState(settings.baseUrl);
     const [apiKey, setApiKey] = useState(settings.apiKey);
     const [model, setModel] = useState(settings.model);
@@ -701,8 +810,16 @@ const SettingsPanel: React.FC<{
     const [storageBytes, setStorageBytes] = useState<number | null>(null);
     const [cleared, setCleared] = useState(false);
     const [roomSearch, setRoomSearch] = useState("");
+    const [notifPermission, setNotifPermission] = useState<NotificationPermission | "unsupported">(
+        typeof Notification === "undefined" ? "unsupported" : Notification.permission,
+    );
 
     const ignoredRoomIds = settings.ignoredRoomIds ?? [];
+    const notificationsEnabled = settings.notificationsEnabled ?? true;
+
+    const requestNotifPermission = (): void => {
+        void Notification.requestPermission().then(setNotifPermission);
+    };
     const allRooms = getMatrixClient()
         .getRooms()
         .filter((r) => r.getMyMembership() === "join")
@@ -753,7 +870,7 @@ const SettingsPanel: React.FC<{
                     <button
                         className="mx_NivrisWorkspace_settingsSave"
                         onClick={() => {
-                            onSave({ baseUrl, apiKey, model, ignoredRoomIds });
+                            onSave({ baseUrl, apiKey, model, ignoredRoomIds, notificationsEnabled });
                             setSaved(true);
                         }}
                     >
@@ -817,6 +934,31 @@ const SettingsPanel: React.FC<{
                         </button>
                         {cleared && <span className="mx_NivrisWorkspace_settingsSavedNote">Đã xoá & quét lại tin hôm nay.</span>}
                     </div>
+                </div>
+
+                <div>
+                    <div className="mx_NivrisWorkspace_sectionLabel">THÔNG BÁO</div>
+                    <label className="mx_NivrisWorkspace_roomIgnoreItem" style={{ border: "none", padding: "4px 0" }}>
+                        <input
+                            type="checkbox"
+                            checked={notificationsEnabled}
+                            onChange={(e) => onChangeNotificationsEnabled(e.target.checked)}
+                        />
+                        <span>Báo khi có tin khớp session đang theo dõi</span>
+                    </label>
+                    {notifPermission === "unsupported" && (
+                        <div className="mx_NivrisWorkspace_settingsSavedNote">Trình duyệt/app không hỗ trợ thông báo desktop.</div>
+                    )}
+                    {notifPermission === "denied" && (
+                        <div className="mx_NivrisWorkspace_settingsSavedNote">
+                            Thông báo đang bị chặn ở cấp hệ thống/app — vào cài đặt thông báo của Element để bật lại.
+                        </div>
+                    )}
+                    {notifPermission === "default" && (
+                        <button className="mx_NivrisWorkspace_storageSecondaryBtn" onClick={requestNotifPermission}>
+                            CẤP QUYỀN THÔNG BÁO
+                        </button>
+                    )}
                 </div>
 
                 <div>

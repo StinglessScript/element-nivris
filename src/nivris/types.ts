@@ -11,6 +11,8 @@ export interface NivrisSettings {
     model: string;
     /** Room IDs whose messages should never be ingested into the local cache. */
     ignoredRoomIds: string[];
+    /** Desktop notifications when a live message matches an active tracker. */
+    notificationsEnabled: boolean;
 }
 
 export const DEFAULT_NIVRIS_SETTINGS: NivrisSettings = {
@@ -18,6 +20,7 @@ export const DEFAULT_NIVRIS_SETTINGS: NivrisSettings = {
     apiKey: "",
     model: "claude-sonnet-4-5",
     ignoredRoomIds: [],
+    notificationsEnabled: true,
 };
 
 export function isNivrisConfigured(settings: NivrisSettings): boolean {
