@@ -19,6 +19,8 @@ export interface StoredNivrisMessage {
     ts: number;
     body: string;
     threadRootId?: string;
+    /** Whether this message mentions the local user (via m.mentions or their display name). */
+    mentionsMe?: boolean;
 }
 
 let dbPromise: Promise<IDBDatabase> | null = null;
@@ -86,16 +88,24 @@ export async function getMessagesSince(sinceTs: number): Promise<StoredNivrisMes
  * given keywords, case-insensitively), most recent first. Used to pull only the relevant slice of
  * cached history into a prompt on demand, instead of ever dumping the whole cache.
  */
-export async function searchMessages(keywords: string[], limit = 40): Promise<StoredNivrisMessage[]> {
+export async function searchMessages(keywords: string[], sinceTs = 0, limit = 40): Promise<StoredNivrisMessage[]> {
     if (!keywords.length) return [];
     const lowerKeywords = keywords.map((k) => k.toLowerCase());
 
-    const all = await getMessagesSince(0);
+    const all = await getMessagesSince(sinceTs);
     const matches = all.filter((m) => {
         const haystack = `${m.roomName} ${m.body}`.toLowerCase();
         return lowerKeywords.some((k) => haystack.includes(k));
     });
 
+    matches.sort((a, b) => b.ts - a.ts);
+    return matches.slice(0, limit);
+}
+
+/** Messages that mention the local user, most recent first. */
+export async function getMentions(sinceTs = 0, limit = 40): Promise<StoredNivrisMessage[]> {
+    const all = await getMessagesSince(sinceTs);
+    const matches = all.filter((m) => m.mentionsMe);
     matches.sort((a, b) => b.ts - a.ts);
     return matches.slice(0, limit);
 }

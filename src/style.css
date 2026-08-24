@@ -660,6 +660,24 @@ Please see LICENSE files in the repository root for full details.
     color: var(--jv-muted);
 }
 
+.mx_NivrisWorkspace_roomIgnoreList {
+    max-height: 220px;
+    overflow-y: auto;
+    border: 1px solid var(--jv-border-strong);
+    border-radius: 4px;
+    padding: 4px 0;
+}
+.mx_NivrisWorkspace_roomIgnoreItem {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 11px;
+    font: 400 11px var(--jv-mono);
+    color: var(--jv-body);
+    cursor: pointer;
+}
+.mx_NivrisWorkspace_roomIgnoreItem:hover { background-color: var(--jv-teal-wash); }
+
 /* ---- Home overview ---- */
 
 .mx_NivrisWorkspace_home { flex: 1; min-height: 0; display: flex; gap: 24px; padding-bottom: 16px; }

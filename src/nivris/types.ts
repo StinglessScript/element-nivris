@@ -9,12 +9,15 @@ export interface NivrisSettings {
     baseUrl: string;
     apiKey: string;
     model: string;
+    /** Room IDs whose messages should never be ingested into the local cache. */
+    ignoredRoomIds: string[];
 }
 
 export const DEFAULT_NIVRIS_SETTINGS: NivrisSettings = {
     baseUrl: "https://api.anthropic.com",
     apiKey: "",
     model: "claude-sonnet-4-5",
+    ignoredRoomIds: [],
 };
 
 export function isNivrisConfigured(settings: NivrisSettings): boolean {

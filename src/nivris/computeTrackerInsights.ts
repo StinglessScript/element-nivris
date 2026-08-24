@@ -6,7 +6,7 @@ Please see LICENSE files in the repository root for full details.
 */
 
 import { getMatrixClient } from "../matrixClient";
-import { getMessagesSince, searchMessages, type StoredNivrisMessage } from "./NivrisMessageDb";
+import { getMentions, getMessagesSince, searchMessages, type StoredNivrisMessage } from "./NivrisMessageDb";
 import { askNivris, NivrisApiError, type NivrisMessage } from "./NivrisApi";
 import { type NivrisSettings } from "./types";
 import { type NivrisUserTracker } from "./NivrisTrackerStore";
@@ -15,17 +15,16 @@ import { startOfToday } from "./NivrisIngest";
 const PRIORITY_KEYWORDS = ["gấp", "khẩn", "deadline", "ưu tiên", "asap", "urgent", "quan trọng"];
 const MAX_MATCHES = 200;
 const MAX_ITEMS_PER_ROOM = 15;
-const MAX_INSIGHT_INPUT_MESSAGES = 60;
+const MAX_INSIGHT_INPUT_MESSAGES = 120;
 
 function keywordsForTracker(tracker: NivrisUserTracker): string[] {
     switch (tracker.type) {
         case "boss":
         case "group":
             return [tracker.label.toLowerCase()].filter(Boolean);
-        case "mention": {
-            const localpart = getMatrixClient().getUserIdLocalpart();
-            return localpart ? [localpart.toLowerCase()] : [];
-        }
+        case "mention":
+            // Handled separately in findMatches via getMentions() — not keyword-based.
+            return [];
         case "priority":
             return PRIORITY_KEYWORDS;
     }
@@ -91,9 +90,11 @@ const PRIORITY_COLORS: TrackerPriorityItem["color"][] = ["blue", "orange", "viol
  * no full-day dump, just a keyword search scoped to this one tracker.
  */
 async function findMatches(tracker: NivrisUserTracker): Promise<StoredNivrisMessage[]> {
+    const sinceTs = startOfToday();
+
     // Picked from the entity picker (real userId/roomId) — match exactly instead of by fuzzy name.
     if (tracker.targetId && (tracker.type === "boss" || tracker.type === "group")) {
-        const all = await getMessagesSince(0);
+        const all = await getMessagesSince(sinceTs);
         const field = tracker.type === "boss" ? "sender" : "roomId";
         return all
             .filter((m) => m[field] === tracker.targetId)
@@ -101,9 +102,11 @@ async function findMatches(tracker: NivrisUserTracker): Promise<StoredNivrisMess
             .slice(0, MAX_MATCHES);
     }
 
+    if (tracker.type === "mention") return getMentions(sinceTs, MAX_MATCHES);
+
     const keywords = keywordsForTracker(tracker);
     if (!keywords.length) return [];
-    return searchMessages(keywords, MAX_MATCHES);
+    return searchMessages(keywords, sinceTs, MAX_MATCHES);
 }
 
 export async function computeTrackerMetrics(tracker: NivrisUserTracker): Promise<TrackerMetrics> {
@@ -188,15 +191,20 @@ export async function generateTrackerInsights(
 ): Promise<string[]> {
     if (!matches.length) return ["Chưa có tin nhắn nào khớp với tracker này trong bộ nhớ đệm."];
 
+    // matches is newest-first; take the most recent N, then present chronologically for the AI.
     const transcript = matches
-        .slice(-MAX_INSIGHT_INPUT_MESSAGES)
+        .slice(0, MAX_INSIGHT_INPUT_MESSAGES)
+        .slice()
+        .reverse()
         .map((m) => `[${new Date(m.ts).toLocaleString("vi-VN")}] (${m.roomName}) ${m.senderName}: ${m.body}`)
         .join("\n");
 
     const systemPrompt = [
         "Bạn là trợ lý N.I.V.R.I.S. đang phân tích các tin nhắn liên quan tới một tracker cụ thể.",
-        "Dựa CHỈ trên transcript được cung cấp, đưa ra tối đa 4 nhận định ngắn gọn, mỗi nhận định 1 dòng, không đánh số, không giải thích dài dòng.",
-        "Không bịa thông tin không có trong transcript.",
+        "Dựa CHỈ trên transcript được cung cấp (không bịa thông tin ngoài transcript), viết tối đa 8 nhận định, mỗi nhận định 1 dòng, không đánh số.",
+        "Mỗi nhận định nên cụ thể — nêu rõ ai nói gì, ở phòng nào, và thời điểm nếu liên quan — thay vì chỉ tóm tắt chung chung.",
+        "Ưu tiên nêu: các câu hỏi/yêu cầu đang chờ người dùng phản hồi, deadline hoặc mốc thời gian được nhắc tới, việc cần làm (action item) và ai chịu trách nhiệm, các quyết định hoặc thay đổi quan trọng, và bất kỳ mâu thuẫn/vấn đề chưa giải quyết.",
+        "Nếu transcript ít nội dung, ít nhận định hơn cũng được — không thêm nhận định thừa để đủ số lượng.",
     ].join("\n");
 
     const messages: NivrisMessage[] = [
@@ -209,7 +217,7 @@ export async function generateTrackerInsights(
             .split("\n")
             .map((line) => line.replace(/^[-*•]\s*/, "").trim())
             .filter(Boolean)
-            .slice(0, 4);
+            .slice(0, 8);
     } catch (e) {
         return [e instanceof NivrisApiError ? e.message : `Lỗi khi phân tích: ${e instanceof Error ? e.message : String(e)}`];
     }

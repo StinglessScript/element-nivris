@@ -30,7 +30,8 @@ import {
     type HomeOverview,
     type TrackerMetrics,
 } from "../nivris/computeTrackerInsights";
-import { ensureNivrisIngestStarted } from "../nivris/NivrisIngest";
+import { ensureNivrisIngestStarted, rescanToday } from "../nivris/NivrisIngest";
+import { getMatrixClient } from "../matrixClient";
 import { clearAllMessages, getMessagesSince, type StoredNivrisMessage } from "../nivris/NivrisMessageDb";
 import NivrisEntityPicker, { type NivrisPickerEntity } from "./NivrisEntityPicker";
 
@@ -103,16 +104,22 @@ const NivrisWorkspace: React.FC = () => {
         setInspectorTab("info");
     }, [activeId]);
 
+    // Recomputed whenever the tracker list changes AND on a short poll, since new messages land in
+    // the cache via live ingest/backfill independently of any tracker being added/removed — without
+    // the poll, counts only ever refreshed if you removed and re-added a session.
     useEffect(() => {
         let cancelled = false;
-        void (async () => {
+        const refresh = async (): Promise<void> => {
             const entries = await Promise.all(
                 trackers.map(async (t) => [t.id, await computeTrackerMetrics(t)] as const),
             );
             if (!cancelled) setMetricsMap(Object.fromEntries(entries));
-        })();
+        };
+        void refresh();
+        const intervalId = window.setInterval(() => void refresh(), 10_000);
         return () => {
             cancelled = true;
+            window.clearInterval(intervalId);
         };
     }, [trackers]);
 
@@ -241,7 +248,11 @@ const NivrisWorkspace: React.FC = () => {
 
                 <div className="mx_NivrisWorkspace_main">
                     {settingsOpen ? (
-                        <SettingsPanel settings={settings} onSave={(s) => { setSettings(s); setSettingsOpen(false); }} />
+                        <SettingsPanel
+                            settings={settings}
+                            onSave={(s) => { setSettings(s); setSettingsOpen(false); }}
+                            onChangeIgnoredRooms={(ignoredRoomIds) => setSettings({ ...settings, ignoredRoomIds })}
+                        />
                     ) : (
                         <>
                             <div className="mx_NivrisWorkspace_mainHead">
@@ -677,7 +688,11 @@ function formatBytes(bytes: number): string {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-const SettingsPanel: React.FC<{ settings: NivrisSettings; onSave: (s: NivrisSettings) => void }> = ({ settings, onSave }) => {
+const SettingsPanel: React.FC<{
+    settings: NivrisSettings;
+    onSave: (s: NivrisSettings) => void;
+    onChangeIgnoredRooms: (ignoredRoomIds: string[]) => void;
+}> = ({ settings, onSave, onChangeIgnoredRooms }) => {
     const [baseUrl, setBaseUrl] = useState(settings.baseUrl);
     const [apiKey, setApiKey] = useState(settings.apiKey);
     const [model, setModel] = useState(settings.model);
@@ -685,6 +700,21 @@ const SettingsPanel: React.FC<{ settings: NivrisSettings; onSave: (s: NivrisSett
     const [messageCount, setMessageCount] = useState<number | null>(null);
     const [storageBytes, setStorageBytes] = useState<number | null>(null);
     const [cleared, setCleared] = useState(false);
+    const [roomSearch, setRoomSearch] = useState("");
+
+    const ignoredRoomIds = settings.ignoredRoomIds ?? [];
+    const allRooms = getMatrixClient()
+        .getRooms()
+        .filter((r) => r.getMyMembership() === "join")
+        .sort((a, b) => (a.name || a.roomId).localeCompare(b.name || b.roomId));
+    const filteredRooms = allRooms.filter((r) => (r.name || r.roomId).toLowerCase().includes(roomSearch.trim().toLowerCase()));
+
+    const toggleIgnored = (roomId: string): void => {
+        const next = ignoredRoomIds.includes(roomId)
+            ? ignoredRoomIds.filter((id) => id !== roomId)
+            : [...ignoredRoomIds, roomId];
+        onChangeIgnoredRooms(next);
+    };
 
     const refreshStorage = (): void => {
         void getMessagesSince(0).then((msgs) => {
@@ -723,7 +753,7 @@ const SettingsPanel: React.FC<{ settings: NivrisSettings; onSave: (s: NivrisSett
                     <button
                         className="mx_NivrisWorkspace_settingsSave"
                         onClick={() => {
-                            onSave({ baseUrl, apiKey, model });
+                            onSave({ baseUrl, apiKey, model, ignoredRoomIds });
                             setSaved(true);
                         }}
                     >
@@ -748,6 +778,17 @@ const SettingsPanel: React.FC<{ settings: NivrisSettings; onSave: (s: NivrisSett
                         <button
                             className="mx_NivrisWorkspace_storageSecondaryBtn"
                             onClick={async () => {
+                                await rescanToday();
+                                refreshStorage();
+                                setCleared(true);
+                                window.setTimeout(() => setCleared(false), 2500);
+                            }}
+                        >
+                            QUÉT LẠI HÔM NAY
+                        </button>
+                        <button
+                            className="mx_NivrisWorkspace_storageSecondaryBtn"
+                            onClick={async () => {
                                 const msgs = await getMessagesSince(0);
                                 const blob = new Blob([JSON.stringify(msgs, null, 2)], { type: "application/json" });
                                 const url = URL.createObjectURL(blob);
@@ -764,6 +805,9 @@ const SettingsPanel: React.FC<{ settings: NivrisSettings; onSave: (s: NivrisSett
                             className="mx_NivrisWorkspace_storageDangerBtn"
                             onClick={async () => {
                                 await clearAllMessages();
+                                // Re-populate from today's room timelines (already in memory) so
+                                // trackers don't stay empty until the next restart.
+                                await rescanToday();
                                 refreshStorage();
                                 setCleared(true);
                                 window.setTimeout(() => setCleared(false), 2500);
@@ -771,7 +815,36 @@ const SettingsPanel: React.FC<{ settings: NivrisSettings; onSave: (s: NivrisSett
                         >
                             XOÁ CACHE
                         </button>
-                        {cleared && <span className="mx_NivrisWorkspace_settingsSavedNote">Đã xoá.</span>}
+                        {cleared && <span className="mx_NivrisWorkspace_settingsSavedNote">Đã xoá & quét lại tin hôm nay.</span>}
+                    </div>
+                </div>
+
+                <div>
+                    <div className="mx_NivrisWorkspace_sectionLabel">PHÒNG KHÔNG LƯU TIN NHẮN</div>
+                    <input
+                        className="mx_NivrisWorkspace_settingsInput"
+                        placeholder="Tìm phòng…"
+                        value={roomSearch}
+                        onChange={(e) => setRoomSearch(e.target.value)}
+                        style={{ marginBottom: 8 }}
+                    />
+                    <div className="mx_NivrisWorkspace_roomIgnoreList">
+                        {filteredRooms.map((room) => (
+                            <label key={room.roomId} className="mx_NivrisWorkspace_roomIgnoreItem">
+                                <input
+                                    type="checkbox"
+                                    checked={ignoredRoomIds.includes(room.roomId)}
+                                    onChange={() => toggleIgnored(room.roomId)}
+                                />
+                                <span>{room.name || room.roomId}</span>
+                            </label>
+                        ))}
+                        {filteredRooms.length === 0 && (
+                            <div className="mx_NivrisWorkspace_settingsSavedNote">Không tìm thấy phòng nào.</div>
+                        )}
+                    </div>
+                    <div className="mx_NivrisWorkspace_settingsNote">
+                        TIN NHẮN TỪ CÁC PHÒNG ĐÃ TICK SẼ KHÔNG ĐƯỢC LƯU VÀO BỘ NHỚ ĐỆM NỮA (CHỈ ÁP DỤNG TỪ LÚC TICK TRỞ ĐI — TIN CŨ ĐÃ LƯU TRƯỚC ĐÓ VẪN CÒN, DÙNG "XOÁ CACHE" NẾU MUỐN XOÁ SẠCH).
                     </div>
                 </div>
 
