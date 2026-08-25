@@ -79,6 +79,16 @@ function main(): void {
             }
             fail(`Không có quyền ghi vào ${resourcesDir}. Thử chạy lại với quyền Administrator.`);
         }
+        if (err && err.code === "EBUSY") {
+            fail(
+                "Element đang chạy nên file đang bị khoá, không sửa được.\n" +
+                    (process.platform === "win32"
+                        ? "Element hay ẩn xuống khay hệ thống (system tray, cạnh đồng hồ) thay vì thoát hẳn khi đóng cửa sổ.\n" +
+                          "Chuột phải vào icon Element trong khay hệ thống → Quit/Exit (hoặc mở Task Manager, End Task mọi\n" +
+                          "tiến trình 'Element'), rồi chạy lại file này."
+                        : "Tắt hẳn Element (Cmd+Q, không chỉ đóng cửa sổ) rồi chạy lại file này."),
+            );
+        }
         throw e;
     }
 
