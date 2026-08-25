@@ -117,7 +117,7 @@ async function main(): Promise<void> {
     }
 
     log("XONG. Mở lại Element — về trạng thái gốc, không còn N.I.V.R.I.S.");
-    finish(TITLE, true);
+    finish(TITLE, true, "Đã gỡ N.I.V.R.I.S. thành công.\n\nMở lại Element để xác nhận.");
 }
 
 main().catch((e) => {

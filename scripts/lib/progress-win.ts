@@ -29,7 +29,9 @@ Add-Type -AssemblyName System.Drawing
 
 $form = New-Object System.Windows.Forms.Form
 $form.Text = $Title
-$form.ClientSize = New-Object System.Drawing.Size(420, 110)
+$form.Font = New-Object System.Drawing.Font('Segoe UI', 9.5)
+$form.BackColor = [System.Drawing.Color]::White
+$form.ClientSize = New-Object System.Drawing.Size(440, 130)
 $form.FormBorderStyle = 'FixedDialog'
 $form.MaximizeBox = $false
 $form.MinimizeBox = $false
@@ -38,11 +40,12 @@ $form.TopMost = $true
 
 $label = New-Object System.Windows.Forms.Label
 $label.Text = 'Dang chuan bi...'
-$label.SetBounds(20, 18, 380, 20)
+$label.ForeColor = [System.Drawing.Color]::FromArgb(40, 40, 40)
+$label.SetBounds(24, 28, 392, 22)
 $form.Controls.Add($label)
 
 $bar = New-Object System.Windows.Forms.ProgressBar
-$bar.SetBounds(20, 48, 380, 24)
+$bar.SetBounds(24, 60, 392, 22)
 $bar.Minimum = 0
 $bar.Maximum = 100
 $form.Controls.Add($bar)

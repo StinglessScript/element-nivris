@@ -15,11 +15,11 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 if [ "$MODE" = "install" ]; then
     APP_NAME="NivrisInstaller"
     TITLE_VI="Cài đặt N.I.V.R.I.S."
-    DONE_MSG_VI="Đã cài đặt N.I.V.R.I.S. thành công.\\n\\nTắt hẳn Element (Cmd+Q, không chỉ đóng cửa sổ) rồi mở lại để thấy tính năng mới."
+    DONE_MSG_VI="Đã cài đặt N.I.V.R.I.S. thành công!\\n\\nMở Element lên để bắt đầu dùng."
 else
     APP_NAME="NivrisUninstaller"
     TITLE_VI="Gỡ N.I.V.R.I.S."
-    DONE_MSG_VI="Đã gỡ N.I.V.R.I.S.\\n\\nTắt hẳn Element (Cmd+Q, không chỉ đóng cửa sổ) rồi mở lại."
+    DONE_MSG_VI="Đã gỡ N.I.V.R.I.S. thành công.\\n\\nMở lại Element để xác nhận."
 fi
 
 APP_DIR="$OUT_DIR/$APP_NAME.app"

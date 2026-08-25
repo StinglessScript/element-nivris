@@ -179,9 +179,9 @@ async function main(): Promise<void> {
     fs.writeFileSync(configPath, JSON.stringify(config, null, 4));
     log(`Đã cập nhật config: ${configPath}`);
 
-    log("XONG. Tắt hẳn Element (không chỉ đóng cửa sổ) rồi mở lại để thấy N.I.V.R.I.S.");
+    log("XONG. Mở Element lên để thấy N.I.V.R.I.S.");
     log("Lưu ý: Element tự cập nhật sẽ ghi đè lại webapp.asar gốc — sau mỗi lần Element tự update, chạy lại file này.");
-    finish(TITLE, true);
+    finish(TITLE, true, "Đã cài đặt N.I.V.R.I.S. thành công!\n\nMở Element lên để bắt đầu dùng.");
 }
 
 main().catch((e) => {

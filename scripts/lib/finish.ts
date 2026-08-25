@@ -45,10 +45,14 @@ function showWindowsMessageBox(title: string, body: string, isError: boolean): v
     }
 }
 
-/** Ends the process, surfacing `logLines` (everything logged so far) to the user. Never returns. */
-export function finish(title: string, success: boolean): never {
+/**
+ * Ends the process. On failure, surfaces the full `logLines` trail (everything logged so far) so
+ * there's something to debug from. On success, shows `successMessage` instead — a short, friendly
+ * line rather than a dump of internal paths and step-by-step log output. Never returns.
+ */
+export function finish(title: string, success: boolean, successMessage?: string): never {
     if (process.platform === "win32") {
-        const body = logLines.join("\n");
+        const body = success ? (successMessage ?? "Hoàn tất.") : logLines.join("\n");
         if (progressActive()) {
             endProgress(success, body);
             // The progress window is a detached process polling the status file we just wrote —
