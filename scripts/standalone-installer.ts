@@ -119,6 +119,18 @@ async function main(): Promise<void> {
     try {
         if (fs.existsSync(webappDir)) {
             log("webapp/ đã tồn tại (đã cài trước đó) — chỉ cập nhật module.");
+            if (fs.existsSync(webappAsar)) {
+                // Leftover from a previous run that got interrupted after extracting but before
+                // renaming (e.g. Element was still running and locked the file) — Element prefers
+                // webapp.asar over webapp/ when both exist, so this silently makes it load the
+                // ORIGINAL unpatched asar instead of ours. Clean it up so the patch actually takes.
+                log("webapp.asar cũ vẫn còn (có thể do lần cài trước bị gián đoạn) — dọn để Element không đọc nhầm bản gốc.");
+                if (fs.existsSync(webappBackup)) {
+                    fs.rmSync(webappAsar);
+                } else {
+                    fs.renameSync(webappAsar, webappBackup);
+                }
+            }
         } else if (fs.existsSync(webappAsar)) {
             log("Giải nén webapp.asar...");
             const { extractAll } = await import("@electron/asar");
