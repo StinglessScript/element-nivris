@@ -42,6 +42,16 @@ Gỡ cài đặt tương tự bằng `NivrisUninstaller-macOS.zip` ở cùng tra
 
 File này tự chứa mọi thứ cần thiết (không cần Node.js, không cần cài gì thêm trước).
 
+### Windows — không cần cài Node.js, không hiện cửa sổ đen (khuyến nghị)
+
+1. Tải `NivrisInstaller-Windows.exe`.
+2. Double-click. Windows Defender SmartScreen có thể chặn ("Windows protected your PC") — bấm
+   **More info**, rồi bấm **Run anyway**.
+3. App chạy ẩn (không hiện Command Prompt), rồi hiện 1 popup báo kết quả — bấm OK.
+4. Đóng hết cửa sổ Element rồi mở lại.
+
+Gỡ cài đặt tương tự bằng `NivrisUninstaller-Windows.exe` ở cùng trang Releases.
+
 ### macOS / Windows — cần cài Node.js trước
 
 Máy cần cài sẵn [Node.js](https://nodejs.org) (bản LTS) — chỉ cài 1 lần. Sau đó, từ trang
@@ -107,8 +117,8 @@ npm run lint:types  # tsc --noEmit
 npm run install:live   # same as npx nivris-install, but from a local checkout
 ```
 
-To rebuild the standalone macOS `.app` installers (needs [Bun](https://bun.com) and Python3 +
-Pillow for the icon — maintainer-only tooling, end users don't need any of this):
+To rebuild the standalone macOS `.app` installers (needs [Bun](https://bun.com) — maintainer-only
+tooling, end users don't need any of this):
 
 ```bash
 npm run build:standalone-mac   # -> dist/NivrisInstaller-macOS.zip, dist/NivrisUninstaller-macOS.zip
@@ -116,5 +126,17 @@ npm run build:standalone-mac   # -> dist/NivrisInstaller-macOS.zip, dist/NivrisU
 
 Builds a universal binary (arm64 + x64 via `lipo`, x64 cross-compiled and untested on real Intel
 hardware) wrapped in a real `.app` bundle — icon, no visible Terminal window, reports success/
-failure via a native dialog. Then attach both zips to a new GitHub Release (they're too large to
-commit — ~50MB each, since they embed the whole Bun runtime).
+failure via a native dialog.
+
+The Windows `.exe` installers are built by the `build-windows-installer.yml` GitHub Actions
+workflow (`gh workflow run build-windows-installer.yml`, then download the
+`nivris-windows-installers` artifact) rather than locally — Bun's `--windows-hide-console` and
+`--windows-icon` flags only work when compiling *on* Windows, so cross-compiling from macOS/Linux
+can't produce a polished (no console flash, custom icon) build; it has to run on an actual
+Windows machine, which the workflow's `windows-latest` runner provides.
+
+App icons live at `assets/icons/AppIcon.icns` / `AppIcon.ico` (both committed — regenerate via
+`python3 scripts/draw-app-icon.py <iconset-dir>` + `iconutil`/`Pillow` if the design changes).
+
+Either way, attach the resulting files to a new GitHub Release — they're too large to commit
+(~50-90MB each, since they embed the whole Bun runtime).
