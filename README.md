@@ -23,9 +23,15 @@ Fully standalone — no element-web monorepo checkout needed to build or install
 
    Không biết máy mình loại nào? Bấm logo Apple góc trái màn hình → "Giới thiệu về Mac này" —
    xem dòng "Chip" hoặc "Bộ xử lý".
-2. Double-click file vừa tải. Lần đầu macOS sẽ chặn ("không xác định được nhà phát triển") —
-   chuột phải vào file → **Open** → **Open** lần nữa để xác nhận. macOS sẽ hỏi có muốn mở bằng
-   Terminal không — chọn **Mở (Open)**.
+2. Double-click file vừa tải. macOS bản mới (Sonoma/Sequoia trở lên) sẽ chặn thẳng ("không xác
+   định được nhà phát triển", chỉ có nút "Move to Trash"/"Done", **không còn** nút Open nào để
+   bấm ngay) — xử lý như sau:
+   - Vào **System Settings → Privacy & Security**, cuộn xuống gần cuối trang (dưới mục "Allow
+     applications from") — sẽ thấy dòng `"NivrisInstaller-macOS-..." was blocked...` kèm nút
+     **Open Anyway**. Bấm vào, nhập mật khẩu/Touch ID để xác nhận.
+   - Nếu chưa thấy dòng đó: double-click lại file 1 lần nữa rồi vào Settings ngay sau đó — dòng
+     này chỉ hiện trong ít phút sau lần bị chặn gần nhất.
+   - Quay lại double-click file — lần này sẽ hiện dialog có nút **Open** thật, bấm vào.
 3. Một cửa sổ Terminal hiện ra, tự chạy và báo kết quả — không cần gõ gì.
 4. Tắt hẳn Element (Cmd+Q, không chỉ đóng cửa sổ) rồi mở lại.
 
@@ -38,8 +44,10 @@ Máy cần cài sẵn [Node.js](https://nodejs.org) (bản LTS) — chỉ cài 1
 1. Tải 2 file `installers/Install-Nivris-Mac.command` (macOS) hoặc
    `installers/Install-Nivris-Windows.bat` (Windows) — bấm nút "Raw" ở link trên rồi Save As,
    hoặc tải cả repo bằng nút "Code → Download ZIP" trên GitHub.
-2. **macOS**: double-click file `.command`. Lần đầu macOS sẽ chặn ("không xác định được nhà phát
-   triển") — chuột phải vào file → **Open** → **Open** lần nữa để xác nhận.
+2. **macOS**: double-click file `.command`. macOS bản mới sẽ chặn ("không xác định được nhà phát
+   triển", không còn nút Open ngay ở menu chuột phải nữa) — vào **System Settings → Privacy &
+   Security** → cuộn xuống tìm dòng "was blocked..." → bấm **Open Anyway** → nhập mật khẩu → mở
+   lại file (xem chi tiết từng bước ở mục trên).
    **Windows**: double-click file `.bat`.
 3. Một cửa sổ đen (Terminal/Command Prompt) hiện ra, tự chạy và báo kết quả — không cần gõ gì.
 4. Tắt hẳn Element (Cmd+Q trên macOS, hoặc đóng hết cửa sổ trên Windows) rồi mở lại.
