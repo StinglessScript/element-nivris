@@ -7,8 +7,9 @@ Please see LICENSE files in the repository root for full details.
 
 /* Visual language ported from the "N.I.V.R.I.S. AI Workspace UI" design
    (claude.ai/design project 64ff5e6a-de78-4a26-8c33-b83ad21e7fbc): teal-on-off-white
-   HUD aesthetic, monospace metadata, wide-tracking display labels. Fixed light palette —
-   the source design has no dark variant, so this module does not adapt to Element's theme. */
+   HUD aesthetic, monospace metadata, wide-tracking display labels. Adapts to Element's own
+   light/dark theme (see the body.cpd-theme-dark override below) rather than the OS preference —
+   Element's theme picker is independent of the system setting. */
 
 /* Global so Nivris-authored elements rendered outside .mx_NivrisWorkspace (room header button,
    dialogs opened via the module API's openDialog) can use these tokens too — not just the
@@ -16,23 +17,62 @@ Please see LICENSE files in the repository root for full details.
 :root {
     --jv-bg: #eef2f7;
     --jv-surface: #ffffff;
+    --jv-surface-rgb: 255 255 255;
     --jv-surface-alt: #f8fafc;
     --jv-cyan: #0fa3a0;
     --jv-teal: #0a7c7a;
-    --jv-teal-wash: rgb(15 163 160 / 7%);
-    --jv-border: rgb(15 163 160 / 14%);
-    --jv-border-strong: rgb(15 163 160 / 28%);
+    /* Solid button/active fills always pair with white text — kept a constant readable mid-teal
+       rather than tracking --jv-teal, which brightens in dark mode for text-on-transparent
+       contrast and would make white-on-fill unreadable if reused here. */
+    --jv-teal-solid: #0a7c7a;
+    --jv-teal-rgb: 15 163 160;
+    --jv-amber-rgb: 201 122 34;
+    --jv-danger-rgb: 196 68 63;
+    --jv-teal-wash: rgb(var(--jv-teal-rgb) / 7%);
+    --jv-border: rgb(var(--jv-teal-rgb) / 14%);
+    --jv-border-strong: rgb(var(--jv-teal-rgb) / 28%);
     --jv-amber: #c97a22;
     --jv-amber-text: #8a5a16;
-    --jv-amber-wash: rgb(201 122 34 / 6%);
+    --jv-amber-wash: rgb(var(--jv-amber-rgb) / 6%);
     --jv-danger: #c4443f;
     --jv-ink: #0b1b26;
     --jv-body: #33505f;
     --jv-muted: #5a7080;
     --jv-label: #52697a;
+    --jv-violet-rgb: 108 92 255;
+    --jv-violet-text: #4b3ecf;
     --jv-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
     --jv-display: system-ui, -apple-system, "Segoe UI", sans-serif;
     --jv-sans: "Inter var", system-ui, -apple-system, sans-serif;
+}
+
+/* Element applies "cpd-theme-dark" (or "cpd-theme-dark-hc" for high contrast) to <body> itself
+   when the user picks a dark theme — see init.js's theme-swap logic. Matching against that class
+   (rather than prefers-color-scheme) means this follows Element's own in-app theme choice, not
+   just the OS setting, which is what actually changes when someone toggles Element's theme. */
+body[class*="cpd-theme-dark"] {
+    --jv-bg: #0b1416;
+    --jv-surface: #121c1f;
+    --jv-surface-rgb: 18 28 31;
+    --jv-surface-alt: #182226;
+    --jv-cyan: #2dd4bf;
+    --jv-teal: #3ddac6;
+    --jv-teal-rgb: 61 218 198;
+    --jv-amber-rgb: 226 169 74;
+    --jv-danger-rgb: 232 116 109;
+    --jv-teal-wash: rgb(var(--jv-teal-rgb) / 10%);
+    --jv-border: rgb(var(--jv-teal-rgb) / 16%);
+    --jv-border-strong: rgb(var(--jv-teal-rgb) / 32%);
+    --jv-amber: #e2a94a;
+    --jv-amber-text: #f0c674;
+    --jv-amber-wash: rgb(var(--jv-amber-rgb) / 10%);
+    --jv-danger: #e8746d;
+    --jv-ink: #eef4f6;
+    --jv-body: #c7d8dc;
+    --jv-muted: #90a7ac;
+    --jv-label: #9bb0b3;
+    --jv-violet-rgb: 149 137 255;
+    --jv-violet-text: #b3a8ff;
 }
 
 .mx_NivrisWorkspace {
@@ -64,7 +104,7 @@ Please see LICENSE files in the repository root for full details.
     gap: 14px;
     padding: 0 18px;
     border-bottom: 1px solid var(--jv-border);
-    background-color: rgb(255 255 255 / 75%);
+    background-color: rgb(var(--jv-surface-rgb) / 75%);
 }
 
 .mx_NivrisWorkspace_headerTitle {
@@ -117,8 +157,8 @@ Please see LICENSE files in the repository root for full details.
 
 .mx_NivrisWorkspace_iconBtn:hover { background-color: var(--jv-teal-wash); }
 .mx_NivrisWorkspace_iconBtn.mx_NivrisWorkspace_iconBtn_active {
-    background-color: var(--jv-teal);
-    border-color: var(--jv-teal);
+    background-color: var(--jv-teal-solid);
+    border-color: var(--jv-teal-solid);
     color: #fff;
 }
 
@@ -204,7 +244,7 @@ Please see LICENSE files in the repository root for full details.
 }
 
 .mx_NivrisWorkspace_sessionRow:hover { background-color: var(--jv-teal-wash); }
-.mx_NivrisWorkspace_sessionRow.mx_NivrisWorkspace_sessionRow_active { background-color: rgb(15 163 160 / 10%); }
+.mx_NivrisWorkspace_sessionRow.mx_NivrisWorkspace_sessionRow_active { background-color: rgb(var(--jv-teal-rgb) / 10%); }
 
 .mx_NivrisWorkspace_sessionDot { width: 6px; height: 6px; border-radius: 100%; flex-shrink: 0; }
 
@@ -293,7 +333,7 @@ Please see LICENSE files in the repository root for full details.
 .mx_NivrisWorkspace_typeBadge {
     padding: 2px 7px;
     border-radius: 3px;
-    background-color: rgb(15 163 160 / 12%);
+    background-color: rgb(var(--jv-teal-rgb) / 12%);
     color: var(--jv-teal);
     font: 600 9px var(--jv-mono);
     letter-spacing: 0.04em;
@@ -310,7 +350,7 @@ Please see LICENSE files in the repository root for full details.
     padding: 7px 10px;
 }
 .mx_NivrisWorkspace_stat.mx_NivrisWorkspace_stat_warn {
-    border-color: rgb(201 122 34 / 28%);
+    border-color: rgb(var(--jv-amber-rgb) / 28%);
     background-color: var(--jv-amber-wash);
 }
 .mx_NivrisWorkspace_statLabel { font: 400 9px var(--jv-mono); color: var(--jv-label); }
@@ -361,7 +401,7 @@ Please see LICENSE files in the repository root for full details.
     color: var(--jv-teal);
     cursor: pointer;
 }
-.mx_NivrisWorkspace_aiCardAction:hover:not(:disabled) { background-color: rgb(15 163 160 / 10%); }
+.mx_NivrisWorkspace_aiCardAction:hover:not(:disabled) { background-color: rgb(var(--jv-teal-rgb) / 10%); }
 .mx_NivrisWorkspace_aiCardAction:disabled { opacity: 0.5; cursor: default; }
 
 .mx_NivrisWorkspace_aiCardBody { margin-top: 10px; display: flex; flex-direction: column; gap: 7px; }
@@ -401,7 +441,7 @@ Please see LICENSE files in the repository root for full details.
     color: var(--jv-teal);
     cursor: pointer;
 }
-.mx_Nivris_threadHeaderBtn:hover { background-color: rgb(15 163 160 / 10%); }
+.mx_Nivris_threadHeaderBtn:hover { background-color: rgb(var(--jv-teal-rgb) / 10%); }
 .mx_Nivris_threadHeaderBtn[data-state="error"] { color: var(--jv-danger); border-color: var(--jv-danger); }
 
 /* ---- Task board ---- */
@@ -527,7 +567,7 @@ Please see LICENSE files in the repository root for full details.
     width: 11px;
     height: 11px;
     border-radius: 100%;
-    border: 1.5px solid rgb(15 163 160 / 25%);
+    border: 1.5px solid rgb(var(--jv-teal-rgb) / 25%);
     border-top-color: var(--jv-teal);
     animation: mx_nivris_spin 0.8s linear infinite;
     flex-shrink: 0;
@@ -557,7 +597,7 @@ Please see LICENSE files in the repository root for full details.
     overflow: hidden;
     text-overflow: ellipsis;
 }
-.mx_NivrisWorkspace_distTrack { height: 6px; border-radius: 3px; background-color: rgb(15 163 160 / 8%); overflow: hidden; }
+.mx_NivrisWorkspace_distTrack { height: 6px; border-radius: 3px; background-color: rgb(var(--jv-teal-rgb) / 8%); overflow: hidden; }
 .mx_NivrisWorkspace_distFill { height: 100%; border-radius: 3px; background-color: var(--jv-cyan); }
 .mx_NivrisWorkspace_distPct { text-align: right; font: 500 10px var(--jv-mono); color: var(--jv-label); }
 
@@ -591,7 +631,7 @@ Please see LICENSE files in the repository root for full details.
 .mx_NivrisWorkspace_roomTab:hover { background-color: var(--jv-teal-wash); }
 .mx_NivrisWorkspace_roomTab_active {
     border-color: var(--jv-border-strong);
-    background-color: rgb(15 163 160 / 10%);
+    background-color: rgb(var(--jv-teal-rgb) / 10%);
     color: var(--jv-ink);
 }
 .mx_NivrisWorkspace_roomTabDot { width: 6px; height: 6px; border-radius: 100%; flex-shrink: 0; }
@@ -609,7 +649,7 @@ Please see LICENSE files in the repository root for full details.
     background-color: var(--jv-surface);
 }
 .mx_NivrisWorkspace_feedRow:hover { border-color: var(--jv-border-strong); background-color: var(--jv-teal-wash); }
-.mx_NivrisWorkspace_feedRow_active { border-color: var(--jv-teal); background-color: rgb(15 163 160 / 8%); }
+.mx_NivrisWorkspace_feedRow_active { border-color: var(--jv-teal); background-color: rgb(var(--jv-teal-rgb) / 8%); }
 
 .mx_NivrisWorkspace_feedRowMain {
     appearance: none;
@@ -639,7 +679,7 @@ Please see LICENSE files in the repository root for full details.
     justify-content: center;
     cursor: pointer;
 }
-.mx_NivrisWorkspace_feedRowAction:hover { background-color: rgb(15 163 160 / 14%); color: var(--jv-teal); }
+.mx_NivrisWorkspace_feedRowAction:hover { background-color: rgb(var(--jv-teal-rgb) / 14%); color: var(--jv-teal); }
 .mx_NivrisWorkspace_feedDot { width: 8px; height: 8px; border-radius: 100%; margin-top: 5px; flex-shrink: 0; }
 .mx_NivrisWorkspace_feedTitle { font: 500 12.5px var(--jv-sans); color: var(--jv-ink); line-height: 1.4; }
 .mx_NivrisWorkspace_feedMeta { margin-top: 3px; font: 400 9.5px var(--jv-mono); color: var(--jv-label); }
@@ -657,7 +697,7 @@ Please see LICENSE files in the repository root for full details.
 .mx_NivrisWorkspace_dangerBtn {
     width: 100%;
     height: 34px;
-    border: 1px solid rgb(196 68 63 / 30%);
+    border: 1px solid rgb(var(--jv-danger-rgb) / 30%);
     border-radius: 5px;
     background: none;
     color: var(--jv-danger);
@@ -668,7 +708,7 @@ Please see LICENSE files in the repository root for full details.
     gap: 7px;
     cursor: pointer;
 }
-.mx_NivrisWorkspace_dangerBtn:hover { background-color: rgb(196 68 63 / 6%); }
+.mx_NivrisWorkspace_dangerBtn:hover { background-color: rgb(var(--jv-danger-rgb) / 6%); }
 
 /* ---- Composer ---- */
 
@@ -741,7 +781,7 @@ Please see LICENSE files in the repository root for full details.
 }
 .mx_NivrisWorkspace_chatBubble_user {
     align-self: flex-end;
-    background-color: var(--jv-teal);
+    background-color: var(--jv-teal-solid);
     color: #fff;
     border-bottom-right-radius: 3px;
 }
@@ -845,7 +885,7 @@ Please see LICENSE files in the repository root for full details.
     padding: 0 16px;
     border: none;
     border-radius: 4px;
-    background-color: var(--jv-teal);
+    background-color: var(--jv-teal-solid);
     color: #fff;
     font: 500 11px var(--jv-mono);
     letter-spacing: 0.04em;
@@ -870,11 +910,11 @@ Please see LICENSE files in the repository root for full details.
 }
 .mx_NivrisWorkspace_storageSecondaryBtn:hover { background-color: var(--jv-teal-wash); }
 .mx_NivrisWorkspace_storageDangerBtn {
-    border: 1px solid rgb(196 68 63 / 30%);
+    border: 1px solid rgb(var(--jv-danger-rgb) / 30%);
     background: none;
     color: var(--jv-danger);
 }
-.mx_NivrisWorkspace_storageDangerBtn:hover { background-color: rgb(196 68 63 / 6%); }
+.mx_NivrisWorkspace_storageDangerBtn:hover { background-color: rgb(var(--jv-danger-rgb) / 6%); }
 
 .mx_NivrisWorkspace_settingsNote {
     margin-top: auto;
@@ -932,7 +972,7 @@ Please see LICENSE files in the repository root for full details.
     border-radius: 5px;
     padding: 10px 11px;
 }
-.mx_NivrisWorkspace_homeMiniStat_warn { border-color: rgb(201 122 34 / 22%); background-color: var(--jv-amber-wash); }
+.mx_NivrisWorkspace_homeMiniStat_warn { border-color: rgb(var(--jv-amber-rgb) / 22%); background-color: var(--jv-amber-wash); }
 .mx_NivrisWorkspace_homeMiniStat_warn .mx_NivrisWorkspace_statLabel { color: var(--jv-amber-text); }
 .mx_NivrisWorkspace_homeMiniNum { margin-top: 4px; font: 600 22px var(--jv-mono); color: var(--jv-ink); }
 .mx_NivrisWorkspace_homeMiniStat_warn .mx_NivrisWorkspace_homeMiniNum { color: var(--jv-amber); }
@@ -1021,11 +1061,11 @@ Please see LICENSE files in the repository root for full details.
 .mx_NivrisWorkspace_threadBadge {
     padding: 2px 6px;
     border-radius: 2px;
-    background-color: rgb(15 163 160 / 12%);
+    background-color: rgb(var(--jv-teal-rgb) / 12%);
     color: var(--jv-teal);
     font: 600 8.5px var(--jv-mono);
 }
-.mx_NivrisWorkspace_threadBadge_none { background-color: rgb(108 92 255 / 12%); color: #4b3ecf; }
+.mx_NivrisWorkspace_threadBadge_none { background-color: rgb(var(--jv-violet-rgb) / 12%); color: var(--jv-violet-text); }
 
 .mx_NivrisWorkspace_inspectorBreadcrumb {
     flex-shrink: 0;
@@ -1079,7 +1119,7 @@ Please see LICENSE files in the repository root for full details.
     height: 34px;
     border: none;
     border-radius: 4px;
-    background-color: var(--jv-teal);
+    background-color: var(--jv-teal-solid);
     color: #fff;
     font: 500 10.5px var(--jv-mono);
     letter-spacing: 0.04em;
