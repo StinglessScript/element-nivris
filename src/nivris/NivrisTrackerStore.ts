@@ -6,6 +6,7 @@ Please see LICENSE files in the repository root for full details.
 */
 
 import { EventEmitter } from "events";
+import { type JobTitleValue } from "./constants";
 
 export const NIVRIS_TRACKER_STORE_CHANGE_EVENT = "change";
 
@@ -30,6 +31,15 @@ export interface NivrisUserTracker {
     /** Timestamp of the last time this tracker's feed was viewed — messages newer than this count
      * as unread. Updated whenever the tracker becomes the active session. */
     lastSeenTs?: number;
+    /** Tags this "boss" (person) tracker for inclusion in the daily report tool — any person
+     * (employee, manager, etc.), not just literal subordinates. */
+    isEmployee?: boolean;
+    /** Vị trí công việc (job title/role), picked from a fixed list — determines both the label
+     * shown alongside the name and which report format the AI uses (manager vs employee). */
+    jobTitle?: JobTitleValue;
+    /** Cached AI-generated end-of-day report, filled in on demand from the Report screen. */
+    dailyReport?: string;
+    dailyReportGeneratedAt?: number;
 }
 
 export interface NivrisChatMessage {
@@ -147,6 +157,24 @@ class NivrisTrackerStore extends EventEmitter {
 
     public clearChat(id: string): void {
         this.trackers = this.trackers.map((t) => (t.id === id ? { ...t, chatMessages: [] } : t));
+        save(this.trackers);
+        this.emit(NIVRIS_TRACKER_STORE_CHANGE_EVENT);
+    }
+
+    public setEmployeeTag(id: string, isEmployee: boolean): void {
+        this.trackers = this.trackers.map((t) => (t.id === id ? { ...t, isEmployee } : t));
+        save(this.trackers);
+        this.emit(NIVRIS_TRACKER_STORE_CHANGE_EVENT);
+    }
+
+    public setJobTitle(id: string, jobTitle: JobTitleValue | undefined): void {
+        this.trackers = this.trackers.map((t) => (t.id === id ? { ...t, jobTitle } : t));
+        save(this.trackers);
+        this.emit(NIVRIS_TRACKER_STORE_CHANGE_EVENT);
+    }
+
+    public setDailyReport(id: string, dailyReport: string): void {
+        this.trackers = this.trackers.map((t) => (t.id === id ? { ...t, dailyReport, dailyReportGeneratedAt: Date.now() } : t));
         save(this.trackers);
         this.emit(NIVRIS_TRACKER_STORE_CHANGE_EVENT);
     }

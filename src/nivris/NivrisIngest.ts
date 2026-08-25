@@ -19,7 +19,15 @@ import {
 } from "matrix-js-sdk/src/matrix";
 
 import { getMatrixClient } from "../matrixClient";
-import { getMeta, putMessage, putMessages, pruneOlderThan, setMeta, type StoredNivrisMessage } from "./NivrisMessageDb";
+import {
+    getMessagesSince,
+    getMeta,
+    putMessage,
+    putMessages,
+    pruneOlderThan,
+    setMeta,
+    type StoredNivrisMessage,
+} from "./NivrisMessageDb";
 import NivrisTrackerStore, { type NivrisUserTracker } from "./NivrisTrackerStore";
 import { PRIORITY_KEYWORDS } from "./constants";
 
@@ -312,6 +320,88 @@ export function rescanToday(): Promise<void> {
     return backfillToday(getMatrixClient());
 }
 
+const REPORT_REMINDER_CHECK_INTERVAL_MS = 60_000;
+
+/** Employees/managers tagged for the daily report who haven't sent a single tracked message
+ * today — the closest proxy we have for "chưa báo cáo công việc" without an AI call per message. */
+async function findPeopleWithoutReportToday(): Promise<NivrisUserTracker[]> {
+    const todayMessages = await getMessagesSince(startOfToday());
+    const sendersToday = new Set(todayMessages.map((m) => m.sender));
+    return NivrisTrackerStore.instance
+        .getTrackers()
+        .filter((t) => t.type === "boss" && t.isEmployee && t.targetId && !sendersToday.has(t.targetId));
+}
+
+interface ReportReminderConfig {
+    enabledKey: "morningReportReminderEnabled" | "reportReminderEnabled";
+    timeKey: "morningReportReminderTime" | "reportReminderTime";
+    metaKey: string;
+    title: string;
+}
+
+const REPORT_REMINDERS: ReportReminderConfig[] = [
+    {
+        enabledKey: "morningReportReminderEnabled",
+        timeKey: "morningReportReminderTime",
+        metaKey: "lastMorningReportReminderDate",
+        title: "N.I.V.R.I.S. — Nhắc báo việc đầu ngày",
+    },
+    {
+        enabledKey: "reportReminderEnabled",
+        timeKey: "reportReminderTime",
+        metaKey: "lastReportReminderDate",
+        title: "N.I.V.R.I.S. — Nhắc báo cáo cuối ngày",
+    },
+];
+
+async function checkReportReminder(config: ReportReminderConfig): Promise<void> {
+    const settings = readSettings();
+    if (settings[config.enabledKey] !== true) return;
+    const reminderTime = typeof settings[config.timeKey] === "string" ? (settings[config.timeKey] as string) : "";
+    if (!/^\d{2}:\d{2}$/.test(reminderTime)) return;
+
+    const now = new Date();
+    const nowHHmm = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+    if (nowHHmm < reminderTime) return;
+
+    const key = localDateKey();
+    if ((await getMeta(config.metaKey)) === key) return;
+    await setMeta(config.metaKey, key);
+
+    const missing = await findPeopleWithoutReportToday();
+    if (!missing.length) return;
+    if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+
+    new Notification(config.title, {
+        body: `${missing.length} người chưa thấy tin nhắn hôm nay: ${missing.map((t) => t.label).join(", ")}`,
+        tag: `nivris-report-reminder-${config.metaKey}`,
+    });
+}
+
+/** Checks once a minute whether it's past either configured reminder time (morning/evening) and,
+ * if so, notifies once per day per reminder about anyone tagged for the report who hasn't sent a
+ * tracked message yet. */
+function startReportReminderScheduler(): void {
+    window.setInterval(() => {
+        for (const config of REPORT_REMINDERS) void checkReportReminder(config);
+    }, REPORT_REMINDER_CHECK_INTERVAL_MS);
+}
+
+/** Manual "quét ngay" trigger — runs the same missing-report check right now, ignoring both the
+ * configured time-of-day and the once-per-day gate, and always fires a notification if there's
+ * anyone missing (regardless of the scheduled reminders' own dedup state). Also returns the list
+ * directly so the Settings UI can show the result inline instead of relying on the OS notification. */
+export async function runReportReminderCheckNow(): Promise<NivrisUserTracker[]> {
+    const missing = await findPeopleWithoutReportToday();
+    if (missing.length && typeof Notification !== "undefined" && Notification.permission === "granted") {
+        new Notification("N.I.V.R.I.S. — Quét nhanh báo công việc", {
+            body: `${missing.length} người chưa thấy tin nhắn hôm nay: ${missing.map((t) => t.label).join(", ")}`,
+            tag: "nivris-report-reminder-manual",
+        });
+    }
+    return missing;
+}
+
 /**
  * Starts live ingestion of new messages into the local Nivris message cache (IndexedDB), and
  * performs a one-time-per-day backfill of today's history so the cache is complete even for
@@ -327,6 +417,8 @@ export async function ensureNivrisIngestStarted(): Promise<void> {
     if (typeof Notification !== "undefined" && Notification.permission === "default") {
         void Notification.requestPermission();
     }
+
+    startReportReminderScheduler();
 
     void pruneOlderThan(Date.now() - RETENTION_DAYS * 24 * 60 * 60 * 1000);
 

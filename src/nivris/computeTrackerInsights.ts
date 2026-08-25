@@ -10,8 +10,9 @@ import { getMentions, getMessagesSince, searchMessages, type StoredNivrisMessage
 import { askNivris, NivrisApiError, type NivrisMessage } from "./NivrisApi";
 import { type NivrisSettings } from "./types";
 import { type NivrisChatMessage, type NivrisUserTracker } from "./NivrisTrackerStore";
+import { type NivrisTaskStatus } from "./NivrisTaskStore";
 import { startOfToday } from "./NivrisIngest";
-import { PRIORITY_KEYWORDS } from "./constants";
+import { JOB_TITLE_OPTIONS, PRIORITY_KEYWORDS } from "./constants";
 
 const MAX_MATCHES = 200;
 const MAX_ITEMS_PER_ROOM = 15;
@@ -269,6 +270,136 @@ export async function askTrackerQuestion(
         return await askNivris(settings, systemPrompt, messages);
     } catch (e) {
         return e instanceof NivrisApiError ? e.message : `Lỗi: ${e instanceof Error ? e.message : String(e)}`;
+    }
+}
+
+/**
+ * Generates an end-of-day report for one employee (a "boss"-type tracker tagged isEmployee),
+ * grounded in that person's messages for today. Structured into 3 sections so it reads like a
+ * standup update: what they worked on, what's done, what's late/still open.
+ */
+export async function generateDailyReport(
+    tracker: NivrisUserTracker,
+    settings: NivrisSettings,
+    matches: StoredNivrisMessage[],
+): Promise<string> {
+    if (!matches.length) return "Không có tin nhắn nào hôm nay để tổng hợp báo cáo.";
+
+    const transcript = matches
+        .slice(0, MAX_INSIGHT_INPUT_MESSAGES)
+        .slice()
+        .reverse()
+        .map((m) => `[${new Date(m.ts).toLocaleTimeString("vi-VN")}] (${m.roomName}) ${m.senderName}: ${m.body}`)
+        .join("\n");
+
+    const roleLabel = JOB_TITLE_OPTIONS.find((o) => o.value === tracker.jobTitle)?.label;
+    const who = roleLabel ? `${tracker.label} (${roleLabel})` : tracker.label;
+    const isManager = tracker.jobTitle === "manager" || tracker.jobTitle === "executive";
+
+    const sections = isManager
+        ? [
+              "ĐÃ CHỈ ĐẠO / QUYẾT ĐỊNH TRONG NGÀY:",
+              "(việc giao cho ai, quyết định gì được chốt)",
+              "",
+              "TÌNH HÌNH ĐỘI NHÓM:",
+              "(ai đang làm gì, ai đang bị chặn/chờ gì)",
+              "",
+              "VIỆC CẦN THEO DÕI TIẾP:",
+              "(việc chưa chốt, câu hỏi chưa có câu trả lời — nếu không có gì thì ghi 'Không có việc cần theo dõi thêm')",
+          ]
+        : [
+              "ĐÃ LÀM HÔM NAY:",
+              "(những việc/thảo luận/quyết định trong ngày)",
+              "",
+              "ĐÃ XONG:",
+              "(việc được xác nhận hoàn thành, chốt xong)",
+              "",
+              "TRỄ / CHƯA XONG:",
+              "(deadline bị trễ, việc còn đang chờ, câu hỏi chưa được trả lời — nếu không có gì trễ thì ghi 'Không có việc trễ')",
+          ];
+
+    const systemPrompt = [
+        `Bạn là trợ lý N.I.V.R.I.S. đang viết báo cáo cuối ngày cho "${who}" dựa trên tin nhắn của họ hôm nay.`,
+        roleLabel
+            ? `Lưu ý vai trò/vị trí công việc của người này là "${roleLabel}" khi diễn giải nội dung — báo cáo của quản lý thường là chỉ đạo/quyết định, còn báo cáo của nhân viên thường là tiến độ việc được giao.`
+            : "",
+        "Dựa CHỈ trên transcript được cung cấp, không bịa thông tin ngoài transcript.",
+        "Trả lời theo đúng 3 mục sau, mỗi mục là các gạch đầu dòng ngắn gọn, cụ thể (nêu rõ việc gì, ở phòng nào nếu cần):",
+        "",
+        ...sections,
+        "",
+        "Nếu 1 mục không có thông tin trong transcript, ghi 'Không có thông tin' cho mục đó thay vì bỏ trống hoặc bịa ra.",
+    ]
+        .filter(Boolean)
+        .join("\n");
+
+    const messages: NivrisMessage[] = [{ role: "user", content: `Transcript:\n${transcript}` }];
+
+    try {
+        return await askNivris(settings, systemPrompt, messages);
+    } catch (e) {
+        return e instanceof NivrisApiError ? e.message : `Lỗi khi tạo báo cáo: ${e instanceof Error ? e.message : String(e)}`;
+    }
+}
+
+const TASK_STATUSES: NivrisTaskStatus[] = ["todo", "doing", "done", "late"];
+
+export interface ExtractedTask {
+    title: string;
+    status: NivrisTaskStatus;
+}
+
+/**
+ * Extracts individual task cards for the daily work board from one person's messages today —
+ * strict JSON out, so the board can render them as Trello-style cards instead of just prose.
+ */
+export async function extractTasksForTracker(
+    tracker: NivrisUserTracker,
+    settings: NivrisSettings,
+    matches: StoredNivrisMessage[],
+): Promise<ExtractedTask[]> {
+    if (!matches.length) return [];
+
+    const transcript = matches
+        .slice(0, MAX_INSIGHT_INPUT_MESSAGES)
+        .slice()
+        .reverse()
+        .map((m) => `[${new Date(m.ts).toLocaleTimeString("vi-VN")}] (${m.roomName}) ${m.senderName}: ${m.body}`)
+        .join("\n");
+
+    const systemPrompt = [
+        `Trích xuất danh sách công việc CỤ THỂ liên quan tới "${tracker.label}" từ transcript tin nhắn hôm nay bên dưới.`,
+        "Mỗi công việc là 1 đầu việc rõ ràng (không phải câu chào hỏi/chat phiếm). Gộp các tin nhắn nói về cùng 1 việc thành 1 đầu việc duy nhất.",
+        'Trả về DUY NHẤT một JSON array, không markdown, không giải thích, đúng dạng: [{"title": "...", "status": "todo"}, ...]',
+        '"title": tên việc ngắn gọn, cụ thể (tối đa ~15 từ).',
+        '"status" là một trong: "todo" (mới giao, chưa bắt đầu), "doing" (đang làm/đang thảo luận tiến độ), "done" (đã xác nhận xong), "late" (deadline bị trễ/quá hạn).',
+        "Nếu không có công việc cụ thể nào, trả về mảng rỗng [].",
+        "",
+        `Transcript:\n${transcript}`,
+    ].join("\n");
+
+    const messages: NivrisMessage[] = [{ role: "user", content: "Trích xuất công việc theo đúng định dạng JSON yêu cầu." }];
+
+    let reply: string;
+    try {
+        reply = await askNivris(settings, systemPrompt, messages);
+    } catch {
+        return [];
+    }
+
+    const jsonMatch = reply.match(/\[[\s\S]*\]/);
+    if (!jsonMatch) return [];
+    try {
+        const parsed = JSON.parse(jsonMatch[0]) as unknown[];
+        return parsed
+            .filter((item): item is { title: unknown; status: unknown } => typeof item === "object" && item !== null)
+            .map((item) => ({
+                title: typeof item.title === "string" ? item.title.trim() : "",
+                status: TASK_STATUSES.includes(item.status as NivrisTaskStatus) ? (item.status as NivrisTaskStatus) : "todo",
+            }))
+            .filter((t) => t.title.length > 0);
+    } catch {
+        return [];
     }
 }
 

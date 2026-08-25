@@ -15,9 +15,12 @@ import GroupIcon from "@vector-im/compound-design-tokens/assets/web/icons/group"
 import MentionIcon from "@vector-im/compound-design-tokens/assets/web/icons/mention";
 import FavouriteSolidIcon from "@vector-im/compound-design-tokens/assets/web/icons/favourite-solid";
 import BlockIcon from "@vector-im/compound-design-tokens/assets/web/icons/block";
+import DocumentIcon from "@vector-im/compound-design-tokens/assets/web/icons/document";
+import DragListIcon from "@vector-im/compound-design-tokens/assets/web/icons/drag-list";
 
 import { useLocalStorageState } from "../useLocalStorageState";
 import { DEFAULT_NIVRIS_SETTINGS, isNivrisConfigured, type NivrisSettings } from "../nivris/types";
+import { JOB_TITLE_OPTIONS, type JobTitleValue } from "../nivris/constants";
 import NivrisTrackerStore, {
     NIVRIS_TRACKER_STORE_CHANGE_EVENT,
     type NivrisChatMessage,
@@ -28,11 +31,19 @@ import {
     askTrackerQuestion,
     computeHomeOverview,
     computeTrackerMetrics,
+    extractTasksForTracker,
+    generateDailyReport,
     generateTrackerInsights,
     type HomeOverview,
     type TrackerMetrics,
 } from "../nivris/computeTrackerInsights";
-import { ensureNivrisIngestStarted, rescanToday } from "../nivris/NivrisIngest";
+import NivrisTaskStore, {
+    NIVRIS_TASK_STORE_CHANGE_EVENT,
+    todayKey,
+    type NivrisTask,
+    type NivrisTaskStatus,
+} from "../nivris/NivrisTaskStore";
+import { ensureNivrisIngestStarted, rescanToday, runReportReminderCheckNow } from "../nivris/NivrisIngest";
 import { getMatrixClient } from "../matrixClient";
 import { clearAllMessages, getMessagesSince, type StoredNivrisMessage } from "../nivris/NivrisMessageDb";
 import NivrisEntityPicker, { type NivrisPickerEntity } from "./NivrisEntityPicker";
@@ -84,6 +95,9 @@ const NivrisWorkspace: React.FC = () => {
     const [hint, setHint] = useState<string | null>(null);
     const [search, setSearch] = useState("");
     const [settingsOpen, setSettingsOpen] = useState(false);
+    const [reportOpen, setReportOpen] = useState(false);
+    const [boardOpen, setBoardOpen] = useState(false);
+    const [tasks, setTasks] = useState<NivrisTask[]>(NivrisTaskStore.instance.getTasksForDate(todayKey()));
     const [selectedMessage, setSelectedMessage] = useState<StoredNivrisMessage | null>(null);
     const [inspectorTab, setInspectorTab] = useState<"message" | "info" | "chat">("info");
     const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
@@ -100,8 +114,13 @@ const NivrisWorkspace: React.FC = () => {
             setActiveId(NivrisTrackerStore.instance.getActiveId());
         };
         NivrisTrackerStore.instance.on(NIVRIS_TRACKER_STORE_CHANGE_EVENT, onChange);
+
+        const onTasksChange = (): void => setTasks(NivrisTaskStore.instance.getTasksForDate(todayKey()));
+        NivrisTaskStore.instance.on(NIVRIS_TASK_STORE_CHANGE_EVENT, onTasksChange);
+
         return () => {
             NivrisTrackerStore.instance.off(NIVRIS_TRACKER_STORE_CHANGE_EVENT, onChange);
+            NivrisTaskStore.instance.off(NIVRIS_TASK_STORE_CHANGE_EVENT, onTasksChange);
         };
     }, []);
 
@@ -214,19 +233,47 @@ const NivrisWorkspace: React.FC = () => {
                 </span>
                 <div className="mx_NivrisWorkspace_headerActions">
                     <button
-                        className={`mx_NivrisWorkspace_iconBtn ${!activeId && !settingsOpen ? "mx_NivrisWorkspace_iconBtn_active" : ""}`}
+                        className={`mx_NivrisWorkspace_iconBtn ${!activeId && !settingsOpen && !reportOpen && !boardOpen ? "mx_NivrisWorkspace_iconBtn_active" : ""}`}
                         title="Về Home"
                         onClick={() => {
                             NivrisTrackerStore.instance.setActive(null);
                             setSettingsOpen(false);
+                            setReportOpen(false);
+                            setBoardOpen(false);
                         }}
                     >
                         <HomeIcon width="15px" height="15px" />
                     </button>
                     <button
+                        className={`mx_NivrisWorkspace_iconBtn ${boardOpen ? "mx_NivrisWorkspace_iconBtn_active" : ""}`}
+                        title="Bảng công việc"
+                        onClick={() => {
+                            setBoardOpen((v) => !v);
+                            setSettingsOpen(false);
+                            setReportOpen(false);
+                        }}
+                    >
+                        <DragListIcon width="15px" height="15px" />
+                    </button>
+                    <button
+                        className={`mx_NivrisWorkspace_iconBtn ${reportOpen ? "mx_NivrisWorkspace_iconBtn_active" : ""}`}
+                        title="Báo cáo cuối ngày"
+                        onClick={() => {
+                            setReportOpen((v) => !v);
+                            setSettingsOpen(false);
+                            setBoardOpen(false);
+                        }}
+                    >
+                        <DocumentIcon width="15px" height="15px" />
+                    </button>
+                    <button
                         className={`mx_NivrisWorkspace_iconBtn ${settingsOpen ? "mx_NivrisWorkspace_iconBtn_active" : ""}`}
                         title="Cài đặt"
-                        onClick={() => setSettingsOpen((v) => !v)}
+                        onClick={() => {
+                            setSettingsOpen((v) => !v);
+                            setReportOpen(false);
+                            setBoardOpen(false);
+                        }}
                     >
                         <SettingsIcon width="15px" height="15px" />
                     </button>
@@ -309,12 +356,29 @@ const NivrisWorkspace: React.FC = () => {
                 </aside>
 
                 <div className="mx_NivrisWorkspace_main">
-                    {settingsOpen ? (
+                    {boardOpen ? (
+                        <TaskBoardView
+                            tasks={tasks}
+                            trackers={trackers}
+                            metricsMap={metricsMap}
+                            settings={settings}
+                            onOpenSettings={() => { setBoardOpen(false); setSettingsOpen(true); }}
+                        />
+                    ) : reportOpen ? (
+                        <ReportView trackers={trackers} metricsMap={metricsMap} settings={settings} onOpenSettings={() => { setReportOpen(false); setSettingsOpen(true); }} />
+                    ) : settingsOpen ? (
                         <SettingsPanel
                             settings={settings}
                             onSave={(s) => { setSettings(s); setSettingsOpen(false); }}
                             onChangeIgnoredRooms={(ignoredRoomIds) => setSettings({ ...settings, ignoredRoomIds })}
                             onChangeNotificationsEnabled={(notificationsEnabled) => setSettings({ ...settings, notificationsEnabled })}
+                            onChangeReportReminder={(kind, enabled, time) =>
+                                setSettings(
+                                    kind === "morning"
+                                        ? { ...settings, morningReportReminderEnabled: enabled, morningReportReminderTime: time }
+                                        : { ...settings, reportReminderEnabled: enabled, reportReminderTime: time },
+                                )
+                            }
                         />
                     ) : (
                         <>
@@ -483,7 +547,7 @@ const NivrisWorkspace: React.FC = () => {
 
                 </div>
 
-                {activeTracker && !settingsOpen && (
+                {activeTracker && !settingsOpen && !reportOpen && !boardOpen && (
                     <SessionInspector
                         tracker={activeTracker}
                         metrics={activeMetrics}
@@ -762,6 +826,37 @@ const SessionInspector: React.FC<{
                             <div className="mx_NivrisWorkspace_inspectorFieldValue">{TYPE_LABEL[tracker.type]}</div>
                         </div>
 
+                        {tracker.type === "boss" && (
+                            <div className="mx_NivrisWorkspace_settingsField">
+                                <label className="mx_NivrisWorkspace_roomIgnoreItem" style={{ border: "none", padding: 0 }}>
+                                    <input
+                                        type="checkbox"
+                                        checked={!!tracker.isEmployee}
+                                        onChange={(e) => NivrisTrackerStore.instance.setEmployeeTag(tracker.id, e.target.checked)}
+                                    />
+                                    <span>Đưa vào báo cáo cuối ngày</span>
+                                </label>
+                                <label className="mx_NivrisWorkspace_settingsLabel">VỊ TRÍ CÔNG VIỆC (VTCV)</label>
+                                <select
+                                    className="mx_NivrisWorkspace_settingsInput"
+                                    value={tracker.jobTitle ?? ""}
+                                    onChange={(e) =>
+                                        NivrisTrackerStore.instance.setJobTitle(
+                                            tracker.id,
+                                            (e.target.value || undefined) as JobTitleValue | undefined,
+                                        )
+                                    }
+                                >
+                                    <option value="">— Chưa chọn —</option>
+                                    {JOB_TITLE_OPTIONS.map((o) => (
+                                        <option key={o.value} value={o.value}>
+                                            {o.label}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
+
                         {!!metrics?.teamWeights.length && (
                             <div>
                                 <div className="mx_NivrisWorkspace_inspectorFieldLabel">PHÂN BỐ THEO PHÒNG</div>
@@ -790,6 +885,232 @@ const SessionInspector: React.FC<{
     );
 };
 
+const ReportView: React.FC<{
+    trackers: NivrisUserTracker[];
+    metricsMap: Record<string, TrackerMetrics | undefined>;
+    settings: NivrisSettings;
+    onOpenSettings: () => void;
+}> = ({ trackers, metricsMap, settings, onOpenSettings }) => {
+    const [generatingIds, setGeneratingIds] = useState<Set<string>>(new Set());
+    const employees = trackers.filter((t) => t.type === "boss" && t.isEmployee);
+
+    const generateFor = async (tracker: NivrisUserTracker): Promise<void> => {
+        setGeneratingIds((prev) => new Set(prev).add(tracker.id));
+        try {
+            const matches = metricsMap[tracker.id]?.matches ?? (await computeTrackerMetrics(tracker)).matches;
+            const report = await generateDailyReport(tracker, settings, matches);
+            NivrisTrackerStore.instance.setDailyReport(tracker.id, report);
+        } finally {
+            setGeneratingIds((prev) => {
+                const next = new Set(prev);
+                next.delete(tracker.id);
+                return next;
+            });
+        }
+    };
+
+    const generateAll = (): void => {
+        for (const t of employees) void generateFor(t);
+    };
+
+    return (
+        <div className="mx_NivrisWorkspace_mainBody">
+            <div className="mx_NivrisWorkspace_mainHead" style={{ padding: 0, border: "none" }}>
+                <div>
+                    <div className="mx_NivrisWorkspace_mainHeadName">
+                        <span className="mx_NivrisWorkspace_mainName">Báo cáo cuối ngày</span>
+                    </div>
+                    <div className="mx_NivrisWorkspace_mainSource">{employees.length} người được gắn vào báo cáo</div>
+                </div>
+                {employees.length > 0 && (
+                    <button
+                        className="mx_NivrisWorkspace_aiCardAction"
+                        onClick={generateAll}
+                        disabled={!isNivrisConfigured(settings) || generatingIds.size > 0}
+                    >
+                        <AiIcon width="12px" height="12px" /> TẠO BÁO CÁO CHO TẤT CẢ
+                    </button>
+                )}
+            </div>
+
+            {!isNivrisConfigured(settings) && (
+                <div className="mx_NivrisWorkspace_aiNotConfigured" style={{ marginTop: 14 }}>
+                    <div className="mx_NivrisWorkspace_aiEmpty">Chưa cấu hình AI — cần model, base URL và API key trước khi tạo báo cáo được.</div>
+                    <button className="mx_NivrisWorkspace_storageSecondaryBtn" onClick={onOpenSettings}>
+                        MỞ CÀI ĐẶT
+                    </button>
+                </div>
+            )}
+
+            {employees.length === 0 ? (
+                <div className="mx_NivrisWorkspace_aiEmpty" style={{ marginTop: 14 }}>
+                    Chưa có ai được gắn vào báo cáo. Mở 1 session "NGƯỜI" (nhân viên hoặc sếp) → tab "THÔNG TIN" → tick "Đưa vào báo cáo cuối ngày" và điền vị trí công việc để đưa vào đây.
+                </div>
+            ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 14, marginTop: 14 }}>
+                    {employees.map((t) => {
+                        const generating = generatingIds.has(t.id);
+                        const metrics = metricsMap[t.id];
+                        return (
+                            <section className="mx_NivrisWorkspace_aiCard" key={t.id}>
+                                <div className="mx_NivrisWorkspace_aiCardHead">
+                                    <i className="mx_NivrisWorkspace_liveDot" />
+                                    <span className="mx_NivrisWorkspace_aiCardTitle">
+                                        {trackerTitle(t).toUpperCase()}
+                                        {(() => {
+                                            const role = JOB_TITLE_OPTIONS.find((o) => o.value === t.jobTitle);
+                                            return role ? ` · ${role.label}` : "";
+                                        })()}
+                                    </span>
+                                    <span className="mx_NivrisWorkspace_aiCardPreview">
+                                        {metrics === undefined ? "đang tính…" : `${metrics.total} tin hôm nay`}
+                                    </span>
+                                    <button
+                                        className="mx_NivrisWorkspace_aiCardAction"
+                                        onClick={() => void generateFor(t)}
+                                        disabled={generating || !isNivrisConfigured(settings) || !metrics?.total}
+                                    >
+                                        {generating ? <span className="mx_NivrisWorkspace_spinner" /> : <AiIcon width="12px" height="12px" />}
+                                        {generating ? "ĐANG TẠO…" : t.dailyReport ? "TẠO LẠI" : "TẠO BÁO CÁO"}
+                                    </button>
+                                </div>
+                                <div className="mx_NivrisWorkspace_aiCardBody">
+                                    {t.dailyReport ? (
+                                        <div className="mx_NivrisWorkspace_reportText">{t.dailyReport}</div>
+                                    ) : (
+                                        <div className="mx_NivrisWorkspace_aiEmpty">Chưa tạo báo cáo hôm nay.</div>
+                                    )}
+                                </div>
+                            </section>
+                        );
+                    })}
+                </div>
+            )}
+        </div>
+    );
+};
+
+const TASK_COLUMNS: { status: NivrisTaskStatus; label: string }[] = [
+    { status: "todo", label: "CẦN LÀM" },
+    { status: "doing", label: "ĐANG LÀM" },
+    { status: "done", label: "ĐÃ XONG" },
+    { status: "late", label: "TRỄ" },
+];
+
+const TaskBoardView: React.FC<{
+    tasks: NivrisTask[];
+    trackers: NivrisUserTracker[];
+    metricsMap: Record<string, TrackerMetrics | undefined>;
+    settings: NivrisSettings;
+    onOpenSettings: () => void;
+}> = ({ tasks, trackers, metricsMap, settings, onOpenSettings }) => {
+    const [scanning, setScanning] = useState(false);
+    const [dragTaskId, setDragTaskId] = useState<string | null>(null);
+    const employees = trackers.filter((t) => t.type === "boss" && t.isEmployee);
+
+    const scanToday = async (): Promise<void> => {
+        setScanning(true);
+        try {
+            for (const t of employees) {
+                const matches = metricsMap[t.id]?.matches ?? (await computeTrackerMetrics(t)).matches;
+                const extracted = await extractTasksForTracker(t, settings, matches);
+                NivrisTaskStore.instance.addTasks(
+                    extracted.map((e) => ({
+                        title: e.title,
+                        status: e.status,
+                        assigneeName: t.label,
+                        trackerId: t.id,
+                        date: todayKey(),
+                    })),
+                );
+            }
+        } finally {
+            setScanning(false);
+        }
+    };
+
+    return (
+        <div className="mx_NivrisWorkspace_mainBody">
+            <div className="mx_NivrisWorkspace_mainHead" style={{ padding: 0, border: "none" }}>
+                <div>
+                    <div className="mx_NivrisWorkspace_mainHeadName">
+                        <span className="mx_NivrisWorkspace_mainName">Bảng công việc hôm nay</span>
+                    </div>
+                    <div className="mx_NivrisWorkspace_mainSource">{tasks.length} thẻ công việc</div>
+                </div>
+                <button
+                    className="mx_NivrisWorkspace_aiCardAction"
+                    onClick={() => void scanToday()}
+                    disabled={scanning || !isNivrisConfigured(settings) || employees.length === 0}
+                >
+                    {scanning ? <span className="mx_NivrisWorkspace_spinner" /> : <AiIcon width="12px" height="12px" />}
+                    {scanning ? "ĐANG QUÉT…" : "QUÉT CÔNG VIỆC HÔM NAY"}
+                </button>
+            </div>
+
+            {!isNivrisConfigured(settings) && (
+                <div className="mx_NivrisWorkspace_aiNotConfigured" style={{ marginTop: 14 }}>
+                    <div className="mx_NivrisWorkspace_aiEmpty">Chưa cấu hình AI — cần model, base URL và API key trước khi quét được.</div>
+                    <button className="mx_NivrisWorkspace_storageSecondaryBtn" onClick={onOpenSettings}>
+                        MỞ CÀI ĐẶT
+                    </button>
+                </div>
+            )}
+            {isNivrisConfigured(settings) && employees.length === 0 && (
+                <div className="mx_NivrisWorkspace_aiEmpty" style={{ marginTop: 14 }}>
+                    Chưa có ai được gắn vào báo cáo. Mở 1 session "NGƯỜI" → tab "THÔNG TIN" → tick "Đưa vào báo cáo cuối ngày" để quét công việc của họ.
+                </div>
+            )}
+
+            <div className="mx_NivrisWorkspace_board">
+                {TASK_COLUMNS.map((col) => (
+                    <div
+                        key={col.status}
+                        className="mx_NivrisWorkspace_boardColumn"
+                        onDragOver={(e) => e.preventDefault()}
+                        onDrop={(e) => {
+                            e.preventDefault();
+                            if (dragTaskId) NivrisTaskStore.instance.setStatus(dragTaskId, col.status);
+                        }}
+                    >
+                        <div className="mx_NivrisWorkspace_boardColumnHead">
+                            {col.label}
+                            <span className="mx_NivrisWorkspace_boardColumnCount">
+                                {tasks.filter((t) => t.status === col.status).length}
+                            </span>
+                        </div>
+                        <div className="mx_NivrisWorkspace_boardColumnBody">
+                            {tasks
+                                .filter((t) => t.status === col.status)
+                                .map((t) => (
+                                    <div
+                                        key={t.id}
+                                        className="mx_NivrisWorkspace_boardCard"
+                                        draggable
+                                        onDragStart={() => setDragTaskId(t.id)}
+                                        onDragEnd={() => setDragTaskId(null)}
+                                    >
+                                        <div className="mx_NivrisWorkspace_boardCardTitle">{t.title}</div>
+                                        <div className="mx_NivrisWorkspace_boardCardFoot">
+                                            <span className="mx_NivrisWorkspace_boardCardAssignee">{t.assigneeName}</span>
+                                            <button
+                                                className="mx_NivrisWorkspace_boardCardRemove"
+                                                title="Xoá thẻ"
+                                                onClick={() => NivrisTaskStore.instance.removeTask(t.id)}
+                                            >
+                                                ×
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
 function formatBytes(bytes: number): string {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -801,7 +1122,8 @@ const SettingsPanel: React.FC<{
     onSave: (s: NivrisSettings) => void;
     onChangeIgnoredRooms: (ignoredRoomIds: string[]) => void;
     onChangeNotificationsEnabled: (enabled: boolean) => void;
-}> = ({ settings, onSave, onChangeIgnoredRooms, onChangeNotificationsEnabled }) => {
+    onChangeReportReminder: (kind: "morning" | "evening", enabled: boolean, time: string) => void;
+}> = ({ settings, onSave, onChangeIgnoredRooms, onChangeNotificationsEnabled, onChangeReportReminder }) => {
     const [baseUrl, setBaseUrl] = useState(settings.baseUrl);
     const [apiKey, setApiKey] = useState(settings.apiKey);
     const [model, setModel] = useState(settings.model);
@@ -813,6 +1135,19 @@ const SettingsPanel: React.FC<{
     const [notifPermission, setNotifPermission] = useState<NotificationPermission | "unsupported">(
         typeof Notification === "undefined" ? "unsupported" : Notification.permission,
     );
+    const [scanningNow, setScanningNow] = useState(false);
+    const [scanResult, setScanResult] = useState<string[] | null>(null);
+
+    const scanNow = async (): Promise<void> => {
+        setScanningNow(true);
+        setScanResult(null);
+        try {
+            const missing = await runReportReminderCheckNow();
+            setScanResult(missing.map((t) => t.label));
+        } finally {
+            setScanningNow(false);
+        }
+    };
 
     const ignoredRoomIds = settings.ignoredRoomIds ?? [];
     const notificationsEnabled = settings.notificationsEnabled ?? true;
@@ -870,7 +1205,7 @@ const SettingsPanel: React.FC<{
                     <button
                         className="mx_NivrisWorkspace_settingsSave"
                         onClick={() => {
-                            onSave({ baseUrl, apiKey, model, ignoredRoomIds, notificationsEnabled });
+                            onSave({ ...settings, baseUrl, apiKey, model });
                             setSaved(true);
                         }}
                     >
@@ -959,6 +1294,63 @@ const SettingsPanel: React.FC<{
                             CẤP QUYỀN THÔNG BÁO
                         </button>
                     )}
+                </div>
+
+                <div>
+                    <div className="mx_NivrisWorkspace_sectionLabel">NHẮC BÁO CÔNG VIỆC</div>
+                    <label className="mx_NivrisWorkspace_roomIgnoreItem" style={{ border: "none", padding: "4px 0" }}>
+                        <input
+                            type="checkbox"
+                            checked={settings.morningReportReminderEnabled ?? false}
+                            onChange={(e) => onChangeReportReminder("morning", e.target.checked, settings.morningReportReminderTime ?? "09:00")}
+                        />
+                        <span>
+                            Nhắc đầu giờ sáng lúc{" "}
+                            <input
+                                type="time"
+                                className="mx_NivrisWorkspace_settingsInput"
+                                style={{ display: "inline-block", width: 110, height: 26, padding: "0 6px" }}
+                                value={settings.morningReportReminderTime ?? "09:00"}
+                                disabled={!settings.morningReportReminderEnabled}
+                                onChange={(e) => onChangeReportReminder("morning", settings.morningReportReminderEnabled ?? false, e.target.value)}
+                            />{" "}
+                            nếu chưa thấy tin nhắn báo việc trong ngày lên nhóm
+                        </span>
+                    </label>
+                    <label className="mx_NivrisWorkspace_roomIgnoreItem" style={{ border: "none", padding: "4px 0" }}>
+                        <input
+                            type="checkbox"
+                            checked={settings.reportReminderEnabled ?? false}
+                            onChange={(e) => onChangeReportReminder("evening", e.target.checked, settings.reportReminderTime ?? "17:30")}
+                        />
+                        <span>
+                            Nhắc cuối ngày lúc{" "}
+                            <input
+                                type="time"
+                                className="mx_NivrisWorkspace_settingsInput"
+                                style={{ display: "inline-block", width: 110, height: 26, padding: "0 6px" }}
+                                value={settings.reportReminderTime ?? "17:30"}
+                                disabled={!settings.reportReminderEnabled}
+                                onChange={(e) => onChangeReportReminder("evening", settings.reportReminderEnabled ?? false, e.target.value)}
+                            />{" "}
+                            nếu ai đó chưa có tin nhắn nào hôm nay
+                        </span>
+                    </label>
+                    <div className="mx_NivrisWorkspace_settingsNote" style={{ marginTop: 0, borderTop: "none", paddingTop: 0 }}>
+                        Áp dụng cho những người đã tick "Đưa vào báo cáo cuối ngày" ở từng session.
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 9 }}>
+                        <button className="mx_NivrisWorkspace_storageSecondaryBtn" onClick={() => void scanNow()} disabled={scanningNow}>
+                            {scanningNow ? <span className="mx_NivrisWorkspace_spinner" /> : null} QUÉT NGAY
+                        </button>
+                        {scanResult && (
+                            <span className="mx_NivrisWorkspace_settingsSavedNote">
+                                {scanResult.length === 0
+                                    ? "Mọi người đều đã có tin nhắn hôm nay."
+                                    : `Chưa có tin nhắn: ${scanResult.join(", ")}`}
+                            </span>
+                        )}
+                    </div>
                 </div>
 
                 <div>

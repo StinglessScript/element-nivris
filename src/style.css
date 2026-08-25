@@ -369,6 +369,109 @@ Please see LICENSE files in the repository root for full details.
 }
 .mx_NivrisWorkspace_aiLine > span:first-child { color: var(--jv-teal); flex-shrink: 0; }
 
+.mx_NivrisWorkspace_reportText {
+    font: 300 12.5px/1.6 var(--jv-sans);
+    color: var(--jv-body);
+    white-space: pre-wrap;
+}
+
+/* ---- Task board ---- */
+
+.mx_NivrisWorkspace_board {
+    display: flex;
+    gap: 12px;
+    margin-top: 14px;
+    flex: 1;
+    min-height: 0;
+    overflow-x: auto;
+    padding-bottom: 8px;
+}
+
+.mx_NivrisWorkspace_boardColumn {
+    flex: 1;
+    min-width: 220px;
+    max-width: 280px;
+    display: flex;
+    flex-direction: column;
+    background-color: var(--jv-surface-alt);
+    border: 1px solid var(--jv-border);
+    border-radius: 6px;
+    min-height: 0;
+}
+
+.mx_NivrisWorkspace_boardColumnHead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+    font: 500 10px var(--jv-mono);
+    letter-spacing: 0.1em;
+    color: var(--jv-label);
+    border-bottom: 1px solid var(--jv-border);
+    flex-shrink: 0;
+}
+.mx_NivrisWorkspace_boardColumnCount {
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 9px;
+    background-color: var(--jv-teal-wash);
+    color: var(--jv-teal);
+    font: 600 9.5px var(--jv-mono);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.mx_NivrisWorkspace_boardColumnBody {
+    flex: 1;
+    min-height: 40px;
+    overflow-y: auto;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.mx_NivrisWorkspace_boardCard {
+    background-color: var(--jv-surface);
+    border: 1px solid var(--jv-border-strong);
+    border-radius: 5px;
+    padding: 9px 10px;
+    cursor: grab;
+}
+.mx_NivrisWorkspace_boardCard:active { cursor: grabbing; }
+
+.mx_NivrisWorkspace_boardCardTitle {
+    font: 400 12px/1.4 var(--jv-sans);
+    color: var(--jv-ink);
+    margin-bottom: 7px;
+}
+
+.mx_NivrisWorkspace_boardCardFoot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+}
+.mx_NivrisWorkspace_boardCardAssignee {
+    font: 500 9.5px var(--jv-mono);
+    color: var(--jv-teal);
+    background-color: var(--jv-teal-wash);
+    padding: 2px 7px;
+    border-radius: 9px;
+}
+.mx_NivrisWorkspace_boardCardRemove {
+    border: none;
+    background: none;
+    color: var(--jv-muted);
+    cursor: pointer;
+    font-size: 15px;
+    line-height: 1;
+    padding: 2px 4px;
+}
+.mx_NivrisWorkspace_boardCardRemove:hover { color: var(--jv-danger); }
+
 .mx_NivrisWorkspace_aiEmpty { font: 400 12px var(--jv-sans); color: var(--jv-muted); }
 .mx_NivrisWorkspace_aiHint { margin-top: 8px; font: 400 11px var(--jv-sans); color: var(--jv-danger); }
 
