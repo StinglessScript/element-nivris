@@ -10,6 +10,7 @@ MODE="$1"        # install | uninstall
 ARCH="$2"        # arm64 | x64
 CLI_BIN="$3"     # path to the compiled standalone-installer / standalone-uninstaller binary
 OUT_DIR="$4"     # where to place the .app
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 if [ "$MODE" = "install" ]; then
     APP_NAME="NivrisInstaller"
@@ -27,7 +28,7 @@ mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
 
 cp "$CLI_BIN" "$APP_DIR/Contents/Resources/nivris-cli"
 chmod +x "$APP_DIR/Contents/Resources/nivris-cli"
-cp /tmp/AppIcon.icns "$APP_DIR/Contents/Resources/AppIcon.icns"
+cp "$REPO_ROOT/assets/icons/AppIcon.icns" "$APP_DIR/Contents/Resources/AppIcon.icns"
 
 cat > "$APP_DIR/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>

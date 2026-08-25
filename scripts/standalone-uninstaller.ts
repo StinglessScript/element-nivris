@@ -14,12 +14,17 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 
+import { finish, log as logRaw } from "./lib/finish";
+
+const TITLE = "Gỡ N.I.V.R.I.S.";
+
 function log(msg: string): void {
-    console.log(`[nivris-uninstall] ${msg}`);
+    logRaw("nivris-uninstall", msg);
 }
 function fail(msg: string): never {
     console.error(`[nivris-uninstall][ERROR] ${msg}`);
-    process.exit(1);
+    logRaw("nivris-uninstall", `LỖI: ${msg}`);
+    finish(TITLE, false);
 }
 
 function resourcesDirFromAppPath(appPath: string): string {
@@ -94,6 +99,11 @@ function main(): void {
     }
 
     log("XONG. Tắt hẳn Element rồi mở lại — về trạng thái gốc, không còn N.I.V.R.I.S.");
+    finish(TITLE, true);
 }
 
-main();
+try {
+    main();
+} catch (e) {
+    fail(e instanceof Error ? e.message : String(e));
+}

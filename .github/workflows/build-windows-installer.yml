@@ -1,0 +1,54 @@
+name: Build standalone Windows installer
+
+# Manual only. Bun's --windows-hide-console and --windows-icon flags only work when compiling ON
+# Windows (cross-compiling from macOS/Linux errors out), so this runs on a windows-latest runner
+# to produce a polished .exe (no console flash, custom icon) matching the macOS .app experience.
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - run: npm install
+      - run: npm run build
+
+      - name: Compile installer.exe
+        run: >
+          bun build --compile
+          --windows-hide-console
+          --windows-icon=assets/icons/AppIcon.ico
+          --windows-title="N.I.V.R.I.S. Installer"
+          --windows-publisher="N.I.V.R.I.S."
+          --windows-description="Cai dat N.I.V.R.I.S. cho Element Desktop"
+          ./scripts/standalone-installer.ts
+          --outfile dist/NivrisInstaller-Windows.exe
+
+      - name: Compile uninstaller.exe
+        run: >
+          bun build --compile
+          --windows-hide-console
+          --windows-icon=assets/icons/AppIcon.ico
+          --windows-title="N.I.V.R.I.S. Uninstaller"
+          --windows-publisher="N.I.V.R.I.S."
+          --windows-description="Go cai dat N.I.V.R.I.S. khoi Element Desktop"
+          ./scripts/standalone-uninstaller.ts
+          --outfile dist/NivrisUninstaller-Windows.exe
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nivris-windows-installers
+          path: |
+            dist/NivrisInstaller-Windows.exe
+            dist/NivrisUninstaller-Windows.exe
+          retention-days: 30

@@ -15,23 +15,22 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 
+import { finish, log as logRaw } from "./lib/finish";
+
 // Embeds lib/index.js into the compiled binary; at runtime (compiled or not) this resolves to a
 // real file path on disk (Bun extracts embedded files to a temp dir when running as a compiled
 // executable). Run `npm run build` before compiling so this file exists to embed.
 import builtJsPath from "../lib/index.js" with { type: "file" };
 
+const TITLE = "Cài đặt N.I.V.R.I.S.";
+
 function log(msg: string): void {
-    console.log(`[nivris-install] ${msg}`);
+    logRaw("nivris-install", msg);
 }
 function fail(msg: string): never {
     console.error(`[nivris-install][ERROR] ${msg}`);
-    console.log("\nNhấn phím bất kỳ để đóng cửa sổ này...");
-    try {
-        fs.readSync(0, Buffer.alloc(1), 0, 1, null);
-    } catch {
-        // stdin may not be interactive (e.g. piped) — ignore.
-    }
-    process.exit(1);
+    logRaw("nivris-install", `LỖI: ${msg}`);
+    finish(TITLE, false);
 }
 
 function resourcesDirFromAppPath(appPath: string): string {
@@ -148,15 +147,9 @@ async function main(): Promise<void> {
 
     log("XONG. Tắt hẳn Element (không chỉ đóng cửa sổ) rồi mở lại để thấy N.I.V.R.I.S.");
     log("Lưu ý: Element tự cập nhật sẽ ghi đè lại webapp.asar gốc — sau mỗi lần Element tự update, chạy lại file này.");
-    console.log("\nNhấn phím bất kỳ để đóng cửa sổ này...");
-    try {
-        fs.readSync(0, Buffer.alloc(1), 0, 1, null);
-    } catch {
-        // stdin may not be interactive — ignore.
-    }
+    finish(TITLE, true);
 }
 
 main().catch((e) => {
-    console.error(e);
-    process.exit(1);
+    fail(e instanceof Error ? e.message : String(e));
 });

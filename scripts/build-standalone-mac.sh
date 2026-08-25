@@ -6,8 +6,8 @@
 #   4. wrap each in a real .app bundle (icon, no visible Terminal window — see build-app-bundle.sh)
 #   5. zip with ditto (preserves the executable bit and app bundle structure)
 #
-# Needs Bun (https://bun.com) and Python3+Pillow (only to draw the icon, first run only) —
-# maintainer-only tooling, end users never need any of this.
+# Needs Bun (https://bun.com) — maintainer-only tooling, end users never need it. Icon comes from
+# the committed assets/icons/AppIcon.icns (regenerate via scripts/draw-app-icon.py if needed).
 #
 # Usage: scripts/build-standalone-mac.sh [outdir]  (defaults to ./dist)
 set -euo pipefail
@@ -20,13 +20,6 @@ trap 'rm -rf "$WORK"' EXIT
 
 echo "==> vite build"
 npm run build >/dev/null
-
-if [ ! -f /tmp/AppIcon.icns ]; then
-    echo "==> drawing AppIcon.icns (first run only)"
-    mkdir -p /tmp/nivris-icon.iconset
-    python3 scripts/draw-app-icon.py /tmp/nivris-icon.iconset
-    iconutil -c icns /tmp/nivris-icon.iconset -o /tmp/AppIcon.icns
-fi
 
 for MODE in install uninstall; do
     if [ "$MODE" = "install" ]; then SRC="scripts/standalone-installer.ts"; else SRC="scripts/standalone-uninstaller.ts"; fi
