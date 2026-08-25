@@ -10,7 +10,10 @@ Please see LICENSE files in the repository root for full details.
    HUD aesthetic, monospace metadata, wide-tracking display labels. Fixed light palette —
    the source design has no dark variant, so this module does not adapt to Element's theme. */
 
-.mx_NivrisWorkspace {
+/* Global so Nivris-authored elements rendered outside .mx_NivrisWorkspace (room header button,
+   dialogs opened via the module API's openDialog) can use these tokens too — not just the
+   workspace page itself. */
+:root {
     --jv-bg: #eef2f7;
     --jv-surface: #ffffff;
     --jv-surface-alt: #f8fafc;
@@ -30,7 +33,9 @@ Please see LICENSE files in the repository root for full details.
     --jv-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
     --jv-display: system-ui, -apple-system, "Segoe UI", sans-serif;
     --jv-sans: "Inter var", system-ui, -apple-system, sans-serif;
+}
 
+.mx_NivrisWorkspace {
     display: flex;
     flex-direction: column;
     flex: 1;
@@ -375,6 +380,30 @@ Please see LICENSE files in the repository root for full details.
     white-space: pre-wrap;
 }
 
+/* ---- Thread-panel AI button (injected into Element's own Thread header) ---- */
+
+/* order:-1 puts it before Element's own "..." options button, which lives in the same flex
+   row inside .mx_BaseCard_header_title. */
+.mx_Nivris_threadHeaderBtnHost { display: inline-flex; margin-right: 6px; order: -1; }
+
+.mx_Nivris_threadHeaderBtn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 22px;
+    min-width: 26px;
+    padding: 0 8px;
+    border: 1px solid var(--jv-border-strong);
+    border-radius: 999px;
+    background: none;
+    font: 700 10px var(--jv-mono);
+    letter-spacing: 0.04em;
+    color: var(--jv-teal);
+    cursor: pointer;
+}
+.mx_Nivris_threadHeaderBtn:hover { background-color: rgb(15 163 160 / 10%); }
+.mx_Nivris_threadHeaderBtn[data-state="error"] { color: var(--jv-danger); border-color: var(--jv-danger); }
+
 /* ---- Task board ---- */
 
 .mx_NivrisWorkspace_board {
@@ -447,6 +476,17 @@ Please see LICENSE files in the repository root for full details.
     color: var(--jv-ink);
     margin-bottom: 7px;
 }
+
+.mx_NivrisWorkspace_boardCardLink {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font: 400 10.5px var(--jv-mono);
+    color: var(--jv-teal);
+    text-decoration: none;
+    margin-bottom: 7px;
+}
+.mx_NivrisWorkspace_boardCardLink:hover { text-decoration: underline; }
 
 .mx_NivrisWorkspace_boardCardFoot {
     display: flex;

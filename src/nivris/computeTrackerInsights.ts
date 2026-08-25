@@ -231,6 +231,39 @@ export async function generateTrackerInsights(
     }
 }
 
+/**
+ * Summarizes a single thread (root message + all replies), grounded only in that thread's
+ * messages — no keyword matching involved, the caller already knows exactly which messages
+ * belong to the thread (see getMessagesByThreadRoot).
+ */
+export async function summarizeThread(settings: NivrisSettings, threadMessages: StoredNivrisMessage[]): Promise<string[]> {
+    if (!threadMessages.length) return ["Không có tin nhắn nào trong thread này."];
+
+    const transcript = threadMessages
+        .map((m) => `[${new Date(m.ts).toLocaleString("vi-VN")}] ${m.senderName}: ${m.body}`)
+        .join("\n");
+
+    const systemPrompt = [
+        "Bạn là trợ lý N.I.V.R.I.S. đang tóm tắt một thread tin nhắn.",
+        "Đọc TOÀN BỘ transcript được cung cấp (không bịa thông tin ngoài transcript) và viết tối đa 8 gạch đầu dòng bằng tiếng Việt, mỗi dòng 1 ý, không đánh số.",
+        "Ưu tiên nêu: thread đang bàn về chuyện gì, các quyết định/kết luận đã chốt, việc cần làm và ai chịu trách nhiệm, deadline nếu có, và câu hỏi/việc còn chưa được trả lời.",
+        "Nếu transcript ít nội dung, ít gạch đầu dòng hơn cũng được — không thêm ý thừa cho đủ số lượng.",
+    ].join("\n");
+
+    const messages: NivrisMessage[] = [{ role: "user", content: `Transcript:\n${transcript}` }];
+
+    try {
+        const reply = await askNivris(settings, systemPrompt, messages);
+        return reply
+            .split("\n")
+            .map((line) => line.replace(/^[-*•]\s*/, "").trim())
+            .filter(Boolean)
+            .slice(0, 8);
+    } catch (e) {
+        return [e instanceof NivrisApiError ? e.message : `Lỗi khi tóm tắt: ${e instanceof Error ? e.message : String(e)}`];
+    }
+}
+
 const MAX_CHAT_HISTORY_TURNS = 20;
 
 /**
@@ -347,6 +380,7 @@ const TASK_STATUSES: NivrisTaskStatus[] = ["todo", "doing", "done", "late"];
 export interface ExtractedTask {
     title: string;
     status: NivrisTaskStatus;
+    link?: string;
 }
 
 /**
@@ -360,19 +394,40 @@ export async function extractTasksForTracker(
 ): Promise<ExtractedTask[]> {
     if (!matches.length) return [];
 
-    const transcript = matches
-        .slice(0, MAX_INSIGHT_INPUT_MESSAGES)
-        .slice()
-        .reverse()
+    const employeeMessages = matches.slice(0, MAX_INSIGHT_INPUT_MESSAGES).slice().reverse();
+
+    // Pull in the rest of each thread too (any sender) — a link the task is actually about is
+    // often posted by someone else replying in the same thread, not by the employee themselves.
+    const threadRootIds = new Set(employeeMessages.map((m) => m.threadRootId).filter((id): id is string => !!id));
+    const threadContext: StoredNivrisMessage[] = [];
+    if (threadRootIds.size) {
+        const sinceTs = startOfToday();
+        const all = await getMessagesSince(sinceTs);
+        const employeeIds = new Set(employeeMessages.map((m) => m.id));
+        for (const m of all) {
+            if (m.threadRootId && threadRootIds.has(m.threadRootId) && !employeeIds.has(m.id)) threadContext.push(m);
+        }
+    }
+
+    const transcript = [...employeeMessages, ...threadContext]
+        .sort((a, b) => a.ts - b.ts)
         .map((m) => `[${new Date(m.ts).toLocaleTimeString("vi-VN")}] (${m.roomName}) ${m.senderName}: ${m.body}`)
         .join("\n");
 
     const systemPrompt = [
         `Trích xuất danh sách công việc CỤ THỂ liên quan tới "${tracker.label}" từ transcript tin nhắn hôm nay bên dưới.`,
-        "Mỗi công việc là 1 đầu việc rõ ràng (không phải câu chào hỏi/chat phiếm). Gộp các tin nhắn nói về cùng 1 việc thành 1 đầu việc duy nhất.",
-        'Trả về DUY NHẤT một JSON array, không markdown, không giải thích, đúng dạng: [{"title": "...", "status": "todo"}, ...]',
+        "Transcript có thể gồm cả tin nhắn của người khác trong cùng thread — dùng để hiểu ngữ cảnh và tìm link liên quan, nhưng công việc trích ra vẫn phải là việc của/liên quan tới " +
+            tracker.label +
+            ".",
+        "PHÂN BIỆT RÕ giữa TRAO ĐỔI (không đưa vào) và VIỆC CẦN LÀM (mới đưa vào):",
+        "- TRAO ĐỔI: hỏi đáp làm rõ yêu cầu, bàn luận/góp ý, cập nhật tình hình chung, chào hỏi, xác nhận đã hiểu, thảo luận ý tưởng chưa chốt — KHÔNG tạo thẻ cho những tin này.",
+        "- VIỆC CẦN LÀM: có một hành động cụ thể được giao/nhận/tự nhận làm (vd 'X làm Y', 'giao cho X việc Y', 'X sẽ Z trước Y giờ'), có deadline được nêu, hoặc một việc được xác nhận đã hoàn thành/bị trễ — CHỈ những tin này mới tạo thẻ.",
+        "Nếu không chắc một đoạn hội thoại có phải là 1 việc cụ thể hay chỉ là trao đổi thông thường, hãy coi đó là trao đổi và KHÔNG tạo thẻ — thà bỏ sót còn hơn tạo thẻ rác từ chat phiếm.",
+        "Gộp các tin nhắn nói về cùng 1 việc thành 1 đầu việc duy nhất.",
+        'Trả về DUY NHẤT một JSON array, không markdown, không giải thích, đúng dạng: [{"title": "...", "status": "todo", "link": "https://..."}, ...]',
         '"title": tên việc ngắn gọn, cụ thể (tối đa ~15 từ).',
         '"status" là một trong: "todo" (mới giao, chưa bắt đầu), "doing" (đang làm/đang thảo luận tiến độ), "done" (đã xác nhận xong), "late" (deadline bị trễ/quá hạn).',
+        '"link": URL (Google Docs, Figma, PR, ảnh...) được nhắc tới khi bàn về việc này, do bất kỳ ai gửi trong đoạn hội thoại liên quan. Bỏ field này nếu không có link nào liên quan — không bịa link.',
         "Nếu không có công việc cụ thể nào, trả về mảng rỗng [].",
         "",
         `Transcript:\n${transcript}`,
@@ -392,10 +447,11 @@ export async function extractTasksForTracker(
     try {
         const parsed = JSON.parse(jsonMatch[0]) as unknown[];
         return parsed
-            .filter((item): item is { title: unknown; status: unknown } => typeof item === "object" && item !== null)
+            .filter((item): item is { title: unknown; status: unknown; link?: unknown } => typeof item === "object" && item !== null)
             .map((item) => ({
                 title: typeof item.title === "string" ? item.title.trim() : "",
                 status: TASK_STATUSES.includes(item.status as NivrisTaskStatus) ? (item.status as NivrisTaskStatus) : "todo",
+                link: typeof item.link === "string" && /^https?:\/\//.test(item.link.trim()) ? item.link.trim() : undefined,
             }))
             .filter((t) => t.title.length > 0);
     } catch {

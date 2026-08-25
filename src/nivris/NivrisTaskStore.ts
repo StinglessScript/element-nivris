@@ -18,6 +18,9 @@ export interface NivrisTask {
     /** Links back to the person tracker this task came from, if scanned (not set for manually added cards). */
     trackerId?: string;
     status: NivrisTaskStatus;
+    /** URL mentioned alongside this task in chat (by the employee or anyone else in the same
+     * thread) — extracted so a card can link straight to the doc/design/PR it's about. */
+    link?: string;
     /** "YYYY-MM-DD" (local) — which day's board this card belongs to. */
     date: string;
     createdAt: number;

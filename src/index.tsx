@@ -10,6 +10,7 @@ import AiIcon from "@vector-im/compound-design-tokens/assets/web/icons/ai";
 
 import type { Module, Api, ModuleFactory } from "@element-hq/element-web-module-api";
 import NivrisWorkspace from "./components/NivrisWorkspace";
+import { startThreadPanelIconInjector } from "./nivris/threadPanelInjector";
 import style from "./style.css" with { type: "css" };
 
 const LOCATION_PATH = "nivris";
@@ -33,6 +34,8 @@ class NivrisModule implements Module {
                 window.location.hash = `#/${LOCATION_PATH}`;
             },
         });
+
+        startThreadPanelIconInjector(this.api);
     }
 }
 

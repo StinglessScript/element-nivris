@@ -34,6 +34,7 @@ import {
     extractTasksForTracker,
     generateDailyReport,
     generateTrackerInsights,
+    summarizeThread,
     type HomeOverview,
     type TrackerMetrics,
 } from "../nivris/computeTrackerInsights";
@@ -45,7 +46,7 @@ import NivrisTaskStore, {
 } from "../nivris/NivrisTaskStore";
 import { ensureNivrisIngestStarted, rescanToday, runReportReminderCheckNow } from "../nivris/NivrisIngest";
 import { getMatrixClient } from "../matrixClient";
-import { clearAllMessages, getMessagesSince, type StoredNivrisMessage } from "../nivris/NivrisMessageDb";
+import { clearAllMessages, getMessagesByThreadRoot, getMessagesSince, type StoredNivrisMessage } from "../nivris/NivrisMessageDb";
 import NivrisEntityPicker, { type NivrisPickerEntity } from "./NivrisEntityPicker";
 
 const TYPE_ICON: Record<NivrisTrackerType, JSX.Element> = {
@@ -104,6 +105,8 @@ const NivrisWorkspace: React.FC = () => {
     const [summaryOpen, setSummaryOpen] = useState(false);
     const [chatInput, setChatInput] = useState("");
     const [chatSending, setChatSending] = useState(false);
+    const [threadSummaries, setThreadSummaries] = useState<Record<string, string[]>>({});
+    const [summarizingThreadId, setSummarizingThreadId] = useState<string | null>(null);
     const chatEndRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
 
@@ -215,6 +218,22 @@ const NivrisWorkspace: React.FC = () => {
     useEffect(() => {
         chatEndRef.current?.scrollIntoView({ block: "end" });
     }, [activeTracker?.chatMessages, chatSending]);
+
+    const onSummarizeThread = async (threadRootId: string): Promise<void> => {
+        if (!isNivrisConfigured(settings)) {
+            setSettingsOpen(true);
+            setHint("Cần cấu hình API AI trước khi tóm tắt.");
+            return;
+        }
+        setSummarizingThreadId(threadRootId);
+        try {
+            const threadMessages = await getMessagesByThreadRoot(threadRootId);
+            const summary = await summarizeThread(settings, threadMessages);
+            setThreadSummaries((prev) => ({ ...prev, [threadRootId]: summary }));
+        } finally {
+            setSummarizingThreadId(null);
+        }
+    };
 
     const filteredTrackers = trackers.filter((t) => trackerTitle(t).toLowerCase().includes(search.trim().toLowerCase()));
     const groupOrder = ["CỐ ĐỊNH", "NGƯỜI", "PHÒNG"];
@@ -560,12 +579,23 @@ const NivrisWorkspace: React.FC = () => {
                         chatSending={chatSending}
                         onSendChat={onSendChat}
                         chatEndRef={chatEndRef}
+                        threadSummary={selectedMessage?.threadRootId ? threadSummaries[selectedMessage.threadRootId] : undefined}
+                        summarizingThread={!!selectedMessage?.threadRootId && selectedMessage.threadRootId === summarizingThreadId}
+                        onSummarizeThread={() => selectedMessage?.threadRootId && void onSummarizeThread(selectedMessage.threadRootId)}
                     />
                 )}
             </div>
         </div>
     );
 };
+
+function linkHostname(url: string): string {
+    try {
+        return new URL(url).hostname;
+    } catch {
+        return url;
+    }
+}
 
 function relTime(ts: number): string {
     const mins = Math.round((Date.now() - ts) / 60000);
@@ -708,7 +738,25 @@ const SessionInspector: React.FC<{
     chatSending: boolean;
     onSendChat: () => void;
     chatEndRef: React.RefObject<HTMLDivElement | null>;
-}> = ({ tracker, metrics, message, tab, onTabChange, onRemoveTracker, chatInput, onChatInputChange, chatSending, onSendChat, chatEndRef }) => {
+    threadSummary: string[] | undefined;
+    summarizingThread: boolean;
+    onSummarizeThread: () => void;
+}> = ({
+    tracker,
+    metrics,
+    message,
+    tab,
+    onTabChange,
+    onRemoveTracker,
+    chatInput,
+    onChatInputChange,
+    chatSending,
+    onSendChat,
+    chatEndRef,
+    threadSummary,
+    summarizingThread,
+    onSummarizeThread,
+}) => {
     const inThread = !!message?.threadRootId && message.threadRootId !== message.id;
 
     return (
@@ -798,6 +846,45 @@ const SessionInspector: React.FC<{
                                 <div className="mx_NivrisWorkspace_inspectorNote">
                                     Tin này nằm trong 1 thread — mở trong Element để xem toàn bộ các trả lời.
                                 </div>
+                            )}
+                            {inThread && (
+                                <section className="mx_NivrisWorkspace_aiCard">
+                                    <div className="mx_NivrisWorkspace_aiCardHead">
+                                        <i className="mx_NivrisWorkspace_liveDot" />
+                                        <span className="mx_NivrisWorkspace_aiCardTitle">TÓM TẮT THREAD</span>
+                                        <button
+                                            className="mx_NivrisWorkspace_aiCardAction"
+                                            onClick={onSummarizeThread}
+                                            disabled={summarizingThread}
+                                        >
+                                            {summarizingThread ? (
+                                                <span className="mx_NivrisWorkspace_spinner" />
+                                            ) : (
+                                                <AiIcon width="12px" height="12px" />
+                                            )}
+                                            {summarizingThread ? "ĐANG TÓM TẮT…" : threadSummary ? "TÓM TẮT LẠI" : "TÓM TẮT"}
+                                        </button>
+                                    </div>
+                                    <div className="mx_NivrisWorkspace_aiCardBody">
+                                        {summarizingThread ? (
+                                            <div className="mx_NivrisWorkspace_aiLoading">
+                                                <span className="mx_NivrisWorkspace_spinner mx_NivrisWorkspace_spinner_lg" />
+                                                <div className="mx_NivrisWorkspace_aiLoadingTitle">Đang đọc thread…</div>
+                                            </div>
+                                        ) : threadSummary ? (
+                                            threadSummary.map((line, i) => (
+                                                <div className="mx_NivrisWorkspace_aiLine" key={i}>
+                                                    <span>—</span>
+                                                    <span>{line}</span>
+                                                </div>
+                                            ))
+                                        ) : (
+                                            <div className="mx_NivrisWorkspace_aiEmpty">
+                                                Chưa tóm tắt. Bấm "Tóm tắt" để AI đọc toàn bộ tin trong thread này.
+                                            </div>
+                                        )}
+                                    </div>
+                                </section>
                             )}
                         </div>
                         <div className="mx_NivrisWorkspace_inspectorFoot">
@@ -1006,7 +1093,9 @@ const TaskBoardView: React.FC<{
 }> = ({ tasks, trackers, metricsMap, settings, onOpenSettings }) => {
     const [scanning, setScanning] = useState(false);
     const [dragTaskId, setDragTaskId] = useState<string | null>(null);
-    const employees = trackers.filter((t) => t.type === "boss" && t.isEmployee);
+    // Board is employee-only by request — "sếp"/quản lý go through the report screen, not the
+    // task board, to keep the two from mixing.
+    const employees = trackers.filter((t) => t.type === "boss" && t.isEmployee && t.jobTitle === "employee");
 
     const scanToday = async (): Promise<void> => {
         setScanning(true);
@@ -1018,6 +1107,7 @@ const TaskBoardView: React.FC<{
                     extracted.map((e) => ({
                         title: e.title,
                         status: e.status,
+                        link: e.link,
                         assigneeName: t.label,
                         trackerId: t.id,
                         date: todayKey(),
@@ -1058,7 +1148,7 @@ const TaskBoardView: React.FC<{
             )}
             {isNivrisConfigured(settings) && employees.length === 0 && (
                 <div className="mx_NivrisWorkspace_aiEmpty" style={{ marginTop: 14 }}>
-                    Chưa có ai được gắn vào báo cáo. Mở 1 session "NGƯỜI" → tab "THÔNG TIN" → tick "Đưa vào báo cáo cuối ngày" để quét công việc của họ.
+                    Chưa có nhân viên nào để quét — bảng này chỉ lấy người có VTCV = "Nhân viên" (sếp/quản lý xem ở màn Báo cáo). Mở 1 session "NGƯỜI" → tab "THÔNG TIN" → tick "Đưa vào báo cáo cuối ngày" + chọn VTCV "Nhân viên".
                 </div>
             )}
 
@@ -1091,6 +1181,17 @@ const TaskBoardView: React.FC<{
                                         onDragEnd={() => setDragTaskId(null)}
                                     >
                                         <div className="mx_NivrisWorkspace_boardCardTitle">{t.title}</div>
+                                        {t.link && (
+                                            <a
+                                                className="mx_NivrisWorkspace_boardCardLink"
+                                                href={t.link}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                onClick={(e) => e.stopPropagation()}
+                                            >
+                                                <PopOutIcon width="11px" height="11px" /> {linkHostname(t.link)}
+                                            </a>
+                                        )}
                                         <div className="mx_NivrisWorkspace_boardCardFoot">
                                             <span className="mx_NivrisWorkspace_boardCardAssignee">{t.assigneeName}</span>
                                             <button

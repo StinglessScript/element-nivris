@@ -102,6 +102,50 @@ export async function searchMessages(keywords: string[], sinceTs = 0, limit = 40
     return matches.slice(0, limit);
 }
 
+export async function getMessageById(id: string): Promise<StoredNivrisMessage | undefined> {
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_MESSAGES, "readonly");
+        const req = tx.objectStore(STORE_MESSAGES).get(id);
+        req.onsuccess = () => resolve(req.result as StoredNivrisMessage | undefined);
+        req.onerror = () => reject(req.error);
+    });
+}
+
+/** All messages belonging to a thread (root + replies), oldest first. */
+export async function getMessagesByThreadRoot(threadRootId: string): Promise<StoredNivrisMessage[]> {
+    const all = await getMessagesSince(0);
+    const matches = all.filter((m) => m.threadRootId === threadRootId || m.id === threadRootId);
+    matches.sort((a, b) => a.ts - b.ts);
+    return matches;
+}
+
+export interface ThreadSummaryMeta {
+    threadRootId: string;
+    count: number;
+    lastTs: number;
+    lastSenderName: string;
+    lastBody: string;
+}
+
+/** All threads seen in a room (from the local cache only), most recently active first. */
+export async function getThreadsForRoom(roomId: string): Promise<ThreadSummaryMeta[]> {
+    const all = await getMessagesSince(0);
+    const byRoot = new Map<string, StoredNivrisMessage[]>();
+    for (const m of all) {
+        if (m.roomId !== roomId || !m.threadRootId) continue;
+        const list = byRoot.get(m.threadRootId) ?? [];
+        list.push(m);
+        byRoot.set(m.threadRootId, list);
+    }
+    return Array.from(byRoot.entries())
+        .map(([threadRootId, msgs]) => {
+            const last = [...msgs].sort((a, b) => b.ts - a.ts)[0];
+            return { threadRootId, count: msgs.length, lastTs: last.ts, lastSenderName: last.senderName, lastBody: last.body };
+        })
+        .sort((a, b) => b.lastTs - a.lastTs);
+}
+
 /** Messages that mention the local user, most recent first. */
 export async function getMentions(sinceTs = 0, limit = 40): Promise<StoredNivrisMessage[]> {
     const all = await getMessagesSince(sinceTs);
