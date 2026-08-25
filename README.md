@@ -18,26 +18,27 @@ Vào trang **[Releases](https://github.com/StinglessScript/element-nivris/releas
 tải file phù hợp — **luôn tải từ trang Releases**, không tải file lẻ qua nút "Raw" trên GitHub
 (cách đó làm mất quyền thực thi của file, double-click sẽ không chạy được).
 
-### macOS — không cần cài Node.js (khuyến nghị)
+### macOS — không cần cài Node.js, có icon riêng, không hiện Terminal (khuyến nghị)
 
-1. Tải đúng 1 file theo loại chip máy:
-   - Chip Apple (M1/M2/M3/M4...): `NivrisInstaller-macOS-AppleSilicon.zip`
-   - Chip Intel (đời cũ hơn): `NivrisInstaller-macOS-Intel.zip`
-
-   Không biết máy mình loại nào? Bấm logo Apple góc trái màn hình → "Giới thiệu về Mac này" —
-   xem dòng "Chip"/"Bộ xử lý".
-2. Double-click file `.zip` vừa tải để giải nén (macOS tự làm), ra 1 file không có đuôi mở rộng.
-3. Double-click file đó. macOS bản mới (Sonoma/Sequoia trở lên) sẽ chặn thẳng ("không xác định
+1. Tải `NivrisInstaller-macOS.zip` — 1 file duy nhất, chạy được cả Mac chip Apple lẫn Intel.
+2. Double-click file `.zip` vừa tải để giải nén (macOS tự làm), ra 1 app tên
+   **NivrisInstaller** có icon riêng.
+3. Double-click app đó. macOS bản mới (Sonoma/Sequoia trở lên) sẽ chặn thẳng ("không xác định
    được nhà phát triển", chỉ có nút "Move to Trash"/"Done", **không còn** nút Open ở menu chuột
    phải nữa) — xử lý như sau:
    - Vào **System Settings → Privacy & Security**, cuộn xuống gần cuối trang (dưới mục "Allow
-     applications from") — sẽ thấy dòng `"NivrisInstaller-macOS-..." was blocked...` kèm nút
+     applications from") — sẽ thấy dòng `"NivrisInstaller" was blocked...` kèm nút
      **Open Anyway**. Bấm vào, nhập mật khẩu/Touch ID để xác nhận.
-   - Nếu chưa thấy dòng đó: double-click lại file 1 lần nữa rồi vào Settings ngay sau đó — dòng
+   - Nếu chưa thấy dòng đó: double-click lại app 1 lần nữa rồi vào Settings ngay sau đó — dòng
      này chỉ hiện trong ít phút sau lần bị chặn gần nhất.
-   - Quay lại double-click file — lần này sẽ hiện dialog có nút **Open** thật, bấm vào.
-4. Một cửa sổ Terminal hiện ra, tự chạy và báo kết quả — không cần gõ gì.
+   - Quay lại double-click app — lần này sẽ hiện dialog có nút **Open** thật, bấm vào.
+4. App chạy ẩn (không hiện cửa sổ Terminal), rồi hiện 1 popup báo kết quả — bấm OK.
 5. Tắt hẳn Element (Cmd+Q, không chỉ đóng cửa sổ) rồi mở lại.
+
+Nếu popup báo lỗi "Không có quyền ghi..." — vào **System Settings → Privacy & Security → App
+Management**, bật cho **NivrisInstaller**, rồi mở lại app.
+
+Gỡ cài đặt tương tự bằng `NivrisUninstaller-macOS.zip` ở cùng trang Releases.
 
 File này tự chứa mọi thứ cần thiết (không cần Node.js, không cần cài gì thêm trước).
 
@@ -106,13 +107,14 @@ npm run lint:types  # tsc --noEmit
 npm run install:live   # same as npx nivris-install, but from a local checkout
 ```
 
-To rebuild the standalone macOS installers (needs [Bun](https://bun.com) — this is a
-maintainer-only tool, end users don't need it):
+To rebuild the standalone macOS `.app` installers (needs [Bun](https://bun.com) and Python3 +
+Pillow for the icon — maintainer-only tooling, end users don't need any of this):
 
 ```bash
-npm run build:standalone-mac-arm64   # -> dist/NivrisInstaller-macOS-AppleSilicon
-npm run build:standalone-mac-intel   # -> dist/NivrisInstaller-macOS-Intel (cross-compiled, untested on real Intel hardware)
+npm run build:standalone-mac   # -> dist/NivrisInstaller-macOS.zip, dist/NivrisUninstaller-macOS.zip
 ```
 
-Then attach both to a new GitHub Release (they're too large to commit — ~65-70MB each, since
-they embed the whole Bun runtime).
+Builds a universal binary (arm64 + x64 via `lipo`, x64 cross-compiled and untested on real Intel
+hardware) wrapped in a real `.app` bundle — icon, no visible Terminal window, reports success/
+failure via a native dialog. Then attach both zips to a new GitHub Release (they're too large to
+commit — ~50MB each, since they embed the whole Bun runtime).

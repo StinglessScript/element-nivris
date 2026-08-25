@@ -14,8 +14,7 @@
         "lint:types": "tsc --noEmit",
         "install:live": "node scripts/install-nivris.mjs",
         "uninstall:live": "node scripts/uninstall-nivris.mjs",
-        "build:standalone-mac-arm64": "npm run build && bun build --compile ./scripts/standalone-installer.ts --outfile dist/NivrisInstaller-macOS-AppleSilicon",
-        "build:standalone-mac-intel": "npm run build && bun build --compile --target=bun-darwin-x64-baseline ./scripts/standalone-installer.ts --outfile dist/NivrisInstaller-macOS-Intel"
+        "build:standalone-mac": "bash scripts/build-standalone-mac.sh"
     },
     "dependencies": {
         "@arcmantle/vite-plugin-import-css-sheet": "^1.0.12",
