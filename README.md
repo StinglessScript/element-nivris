@@ -12,7 +12,24 @@ retention) as they arrive, and are only sent anywhere when you press
 
 Fully standalone — no element-web monorepo checkout needed to build or install it.
 
-## Install into an already-installed Element Desktop
+## Install (không rành dòng lệnh)
+
+Máy vẫn cần cài sẵn [Node.js](https://nodejs.org) (bản LTS) — chỉ cài 1 lần, việc này thì
+không tránh được. Sau đó:
+
+1. Tải 2 file `installers/Install-Nivris-Mac.command` (macOS) hoặc
+   `installers/Install-Nivris-Windows.bat` (Windows) — bấm nút "Raw" ở link trên rồi Save As,
+   hoặc tải cả repo bằng nút "Code → Download ZIP" trên GitHub.
+2. **macOS**: double-click file `.command`. Lần đầu macOS sẽ chặn ("không xác định được nhà phát
+   triển") — chuột phải vào file → **Open** → **Open** lần nữa để xác nhận.
+   **Windows**: double-click file `.bat`.
+3. Một cửa sổ đen (Terminal/Command Prompt) hiện ra, tự chạy và báo kết quả — không cần gõ gì.
+4. Tắt hẳn Element (Cmd+Q trên macOS, hoặc đóng hết cửa sổ trên Windows) rồi mở lại.
+
+Gỡ cài đặt tương tự bằng file `Uninstall-Nivris-Mac.command` /
+`Uninstall-Nivris-Windows.bat`.
+
+## Install into an already-installed Element Desktop (dòng lệnh)
 
 One command, no manual `git clone`:
 
