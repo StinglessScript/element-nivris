@@ -31,6 +31,7 @@ Get-ItemProperty $paths -ErrorAction SilentlyContinue | Where-Object { $_.Displa
     try {
         const out = execFileSync("powershell", ["-NoProfile", "-NonInteractive", "-Command", script], {
             encoding: "utf-8",
+            windowsHide: true,
         }).trim();
         return out || undefined;
     } catch {

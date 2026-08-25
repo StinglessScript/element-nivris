@@ -11,9 +11,17 @@ Please see LICENSE files in the repository root for full details.
 // quit first, falls back to a forceful kill if it doesn't exit within a few seconds. Never throws —
 // if it can't confirm Element is closed, the caller's existing EBUSY handling still catches that.
 
+// windowsHide: true is load-bearing, not cosmetic — without it, every tasklist/taskkill spawned
+// from this console-less compiled .exe gets its own new console window from Windows (nothing to
+// attach to), which flashes on screen. isRunningWindows() alone gets called up to ~17 times while
+// polling for Element to exit, so omitting this turns into a rapid strobe of console flashes.
 function isRunningWindows(): boolean {
     try {
-        const out = Bun.spawnSync(["tasklist", "/FI", "IMAGENAME eq Element.exe", "/FO", "CSV", "/NH"], { stdout: "pipe", stderr: "ignore" });
+        const out = Bun.spawnSync(["tasklist", "/FI", "IMAGENAME eq Element.exe", "/FO", "CSV", "/NH"], {
+            stdout: "pipe",
+            stderr: "ignore",
+            windowsHide: true,
+        });
         return new TextDecoder().decode(out.stdout).toLowerCase().includes("element.exe");
     } catch {
         return false;
@@ -47,13 +55,13 @@ export async function quitElementIfRunning(onStatus?: (msg: string) => void): Pr
         if (!isRunningWindows()) return true;
         onStatus?.("Element đang chạy — đang tắt...");
         try {
-            Bun.spawnSync(["taskkill", "/IM", "Element.exe", "/T"], { stdout: "ignore", stderr: "ignore" });
+            Bun.spawnSync(["taskkill", "/IM", "Element.exe", "/T"], { stdout: "ignore", stderr: "ignore", windowsHide: true });
         } catch {
             // ignore — waitUntilClosed below decides whether this actually worked
         }
         if (await waitUntilClosed(isRunningWindows, 5000)) return true;
         try {
-            Bun.spawnSync(["taskkill", "/IM", "Element.exe", "/T", "/F"], { stdout: "ignore", stderr: "ignore" });
+            Bun.spawnSync(["taskkill", "/IM", "Element.exe", "/T", "/F"], { stdout: "ignore", stderr: "ignore", windowsHide: true });
         } catch {
             // ignore
         }

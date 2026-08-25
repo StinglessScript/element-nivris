@@ -51,7 +51,10 @@ $timer = New-Object System.Windows.Forms.Timer
 $timer.Interval = 100
 $timer.Add_Tick({
     if (-not (Test-Path $StatusFile)) { return }
-    try { $s = Get-Content $StatusFile -Raw | ConvertFrom-Json } catch { return }
+    # Get-Content's default encoding on Windows PowerShell 5.1 is the system codepage, not UTF-8 —
+    # since the .exe (via Bun/Node) always writes this file as UTF-8, reading it any other way
+    # mangles the Vietnamese text. Read the bytes and decode explicitly instead.
+    try { $s = [System.IO.File]::ReadAllText($StatusFile, [System.Text.Encoding]::UTF8) | ConvertFrom-Json } catch { return }
     $bar.Value = [Math]::Min([Math]::Max([int]$s.percent, 0), 100)
     $label.Text = $s.label
     if ($s.done) {
@@ -88,6 +91,20 @@ function vbsEscape(s: string): string {
     return s.replace(/"/g, '""');
 }
 
+/** Windows PowerShell 5.1 only reliably auto-detects UTF-8 script files when they start with a
+ * BOM — without one it falls back to the system codepage, which mangles Vietnamese text embedded
+ * in the script (or, for .vbs, mangles the Title text baked into the command line at write time). */
+function writeUtf8Bom(filePath: string, content: string): void {
+    fs.writeFileSync(filePath, Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(content, "utf8")]));
+}
+
+/** Windows Script Host (cscript/wscript) only reliably treats a .vbs file as Unicode with a
+ * UTF-16LE BOM — the classic "Unicode text file" format, universally supported since VBScript
+ * predates UTF-8 BOM conventions on Windows. */
+function writeUtf16LeBom(filePath: string, content: string): void {
+    fs.writeFileSync(filePath, Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(content, "utf16le")]));
+}
+
 /** Spawns the detached progress window. No-op outside Windows. */
 export function startProgress(title: string): void {
     if (process.platform !== "win32") return;
@@ -95,7 +112,7 @@ export function startProgress(title: string): void {
         const dir = fs.mkdtempSync(path.join(os.tmpdir(), "nivris-progress-"));
         statusFile = path.join(dir, "status.json");
         const scriptFile = path.join(dir, "progress.ps1");
-        fs.writeFileSync(scriptFile, PS_SCRIPT);
+        writeUtf8Bom(scriptFile, PS_SCRIPT);
         writeStatus({ percent: 0, label: "Dang chuan bi...", done: false });
 
         // Launched via WScript.Shell.Run (window style 0 = hidden) rather than
@@ -118,11 +135,13 @@ export function startProgress(title: string): void {
             .map(quoteArg)
             .join(" ");
         const vbsFile = path.join(dir, "launch.vbs");
-        fs.writeFileSync(
-            vbsFile,
-            `CreateObject("WScript.Shell").Run "${vbsEscape(psCommandLine)}", 0, False\n`,
-        );
-        Bun.spawn(["wscript.exe", "//B", "//NoLogo", vbsFile], { stdout: "ignore", stderr: "ignore", stdin: "ignore" });
+        writeUtf16LeBom(vbsFile, `CreateObject("WScript.Shell").Run "${vbsEscape(psCommandLine)}", 0, False\n`);
+        Bun.spawn(["wscript.exe", "//B", "//NoLogo", vbsFile], {
+            stdout: "ignore",
+            stderr: "ignore",
+            stdin: "ignore",
+            windowsHide: true,
+        });
     } catch {
         // PowerShell/WScript missing or unspawnable — fall back to no progress window at all;
         // finish() still needs to show *something*, handled by its own fallback when statusFile is null.

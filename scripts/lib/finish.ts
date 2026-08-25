@@ -37,7 +37,7 @@ function showWindowsMessageBox(title: string, body: string, isError: boolean): v
                 "-Command",
                 `Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('${esc}', '${titleEsc}', [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::${icon})`,
             ],
-            { stdout: "ignore", stderr: "ignore" },
+            { stdout: "ignore", stderr: "ignore", windowsHide: true },
         );
     } catch {
         // Best-effort — if PowerShell somehow isn't available, there's nothing else we can do
