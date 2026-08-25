@@ -20,6 +20,9 @@ jobs:
         with:
           node-version: 22
 
+      # matrix-js-sdk (a git dependency here) runs its own `pnpm build` prepare script on
+      # install — needs pnpm available even though this repo itself uses npm.
+      - run: corepack enable
       - run: npm install
       - run: npm run build
 
