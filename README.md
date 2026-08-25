@@ -14,8 +14,26 @@ Fully standalone — no element-web monorepo checkout needed to build or install
 
 ## Install (không rành dòng lệnh)
 
-Máy vẫn cần cài sẵn [Node.js](https://nodejs.org) (bản LTS) — chỉ cài 1 lần, việc này thì
-không tránh được. Sau đó:
+### macOS — không cần cài Node.js
+
+1. Vào [Releases](https://github.com/StinglessScript/element-nivris/releases/latest), tải đúng 1
+   file theo loại máy:
+   - Mac dùng chip Apple (M1/M2/M3/M4...): `NivrisInstaller-macOS-AppleSilicon`
+   - Mac dùng chip Intel (đời cũ hơn): `NivrisInstaller-macOS-Intel`
+
+   Không biết máy mình loại nào? Bấm logo Apple góc trái màn hình → "Giới thiệu về Mac này" —
+   xem dòng "Chip" hoặc "Bộ xử lý".
+2. Double-click file vừa tải. Lần đầu macOS sẽ chặn ("không xác định được nhà phát triển") —
+   chuột phải vào file → **Open** → **Open** lần nữa để xác nhận. macOS sẽ hỏi có muốn mở bằng
+   Terminal không — chọn **Mở (Open)**.
+3. Một cửa sổ Terminal hiện ra, tự chạy và báo kết quả — không cần gõ gì.
+4. Tắt hẳn Element (Cmd+Q, không chỉ đóng cửa sổ) rồi mở lại.
+
+File này tự chứa mọi thứ cần thiết (không cần Node.js, không cần cài gì thêm trước).
+
+### macOS / Windows — cần cài Node.js trước
+
+Máy cần cài sẵn [Node.js](https://nodejs.org) (bản LTS) — chỉ cài 1 lần. Sau đó:
 
 1. Tải 2 file `installers/Install-Nivris-Mac.command` (macOS) hoặc
    `installers/Install-Nivris-Windows.bat` (Windows) — bấm nút "Raw" ở link trên rồi Save As,
@@ -78,3 +96,14 @@ npm run build       # vite build -> lib/index.js
 npm run lint:types  # tsc --noEmit
 npm run install:live   # same as npx nivris-install, but from a local checkout
 ```
+
+To rebuild the standalone macOS installers (needs [Bun](https://bun.com) — this is a
+maintainer-only tool, end users don't need it):
+
+```bash
+npm run build:standalone-mac-arm64   # -> dist/NivrisInstaller-macOS-AppleSilicon
+npm run build:standalone-mac-intel   # -> dist/NivrisInstaller-macOS-Intel (cross-compiled, untested on real Intel hardware)
+```
+
+Then attach both to a new GitHub Release (they're too large to commit — ~65-70MB each, since
+they embed the whole Bun runtime).
