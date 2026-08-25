@@ -30,6 +30,12 @@ for MODE in install uninstall; do
     echo "==> lipo universal binary"
     lipo -create "$WORK/$MODE-arm64" "$WORK/$MODE-x64" -output "$WORK/$MODE-universal"
     chmod +x "$WORK/$MODE-universal"
+    # lipo invalidates each slice's ad-hoc signature (offsets shift once merged) without
+    # re-signing the result — Apple Silicon's AMFI refuses to execute a binary with an invalid
+    # signature and SIGKILLs it silently (no output at all), which is exactly what end users hit.
+    # Re-sign ad-hoc (no Developer ID needed, just makes the signature valid again) so it launches.
+    echo "==> re-signing universal binary (ad-hoc)"
+    codesign -s - --force "$WORK/$MODE-universal"
 
     echo "==> wrapping in .app"
     bash scripts/build-app-bundle.sh "$MODE" universal "$WORK/$MODE-universal" "$WORK"

@@ -67,6 +67,11 @@ cat > "$APP_DIR/Contents/MacOS/$APP_NAME" <<LAUNCHER
 # window, matches how a normal double-clicked app behaves.
 DIR="\$(cd "\$(dirname "\$0")" && pwd)"
 CLI="\$DIR/../Resources/nivris-cli"
+# Files extracted from a browser-downloaded zip carry com.apple.quarantine, which makes Gatekeeper
+# refuse to run an ad-hoc-signed (non-notarized) binary spawned directly like this — silently
+# SIGKILLed, no output, no prompt. Strip it ourselves: the user already chose to open this app, and
+# removing an xattr on a file you own needs no special privilege.
+xattr -d com.apple.quarantine "\$CLI" 2>/dev/null || true
 OUTPUT=\$("\$CLI" < /dev/null 2>&1)
 STATUS=\$?
 
