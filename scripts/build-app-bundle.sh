@@ -79,7 +79,16 @@ if [ \$STATUS -eq 0 ]; then
     /usr/bin/osascript -e "display dialog \"$DONE_MSG_VI\" with title \"$TITLE_VI\" buttons {\"OK\"} default button \"OK\" with icon note"
 else
     ESCAPED=\$(echo "\$OUTPUT" | tail -c 1500 | sed 's/"/\\\\"/g' | sed 's/\$/\\\\n/' | tr -d '\n')
-    /usr/bin/osascript -e "display dialog \"Có lỗi khi chạy:\\n\\n\$ESCAPED\" with title \"$TITLE_VI — Lỗi\" buttons {\"OK\"} default button \"OK\" with icon stop"
+    if echo "\$OUTPUT" | grep -q "App Management"; then
+        # The one error case with a concrete one-click fix: offer to jump straight to the right
+        # System Settings pane instead of making the user hunt for "App Management" themselves.
+        CHOICE=\$(/usr/bin/osascript -e "display dialog \"Có lỗi khi chạy:\\n\\n\$ESCAPED\" with title \"$TITLE_VI — Lỗi\" buttons {\"Đóng\", \"Mở Cài đặt\"} default button \"Mở Cài đặt\" with icon stop" -e "button returned of result" 2>/dev/null)
+        if [ "\$CHOICE" = "Mở Cài đặt" ]; then
+            open "x-apple.systempreferences:com.apple.preference.security?Privacy_AppManagement"
+        fi
+    else
+        /usr/bin/osascript -e "display dialog \"Có lỗi khi chạy:\\n\\n\$ESCAPED\" with title \"$TITLE_VI — Lỗi\" buttons {\"OK\"} default button \"OK\" with icon stop"
+    fi
 fi
 LAUNCHER
 chmod +x "$APP_DIR/Contents/MacOS/$APP_NAME"
