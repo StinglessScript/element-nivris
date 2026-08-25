@@ -16,6 +16,7 @@ import os from "node:os";
 
 import { finish, log as logRaw } from "./lib/finish";
 import { findElementResourcesDirWindows } from "./lib/find-element-windows.mjs";
+import { setProgress, startProgress } from "./lib/progress-win";
 
 const TITLE = "Gỡ N.I.V.R.I.S.";
 
@@ -58,6 +59,9 @@ function userConfigPath(): string {
 }
 
 function main(): void {
+    startProgress(TITLE);
+    setProgress(15, "Đang tìm Element Desktop...");
+
     const resourcesDir = findElementApp();
     const webappDir = path.join(resourcesDir, "webapp");
     const webappBackup = path.join(resourcesDir, "webapp.asar.nivris-backup");
@@ -67,6 +71,7 @@ function main(): void {
         fail(`Không tìm thấy backup tại ${webappBackup} — có vẻ chưa cài Nivris vào bản Element này.`);
     }
 
+    setProgress(45, "Đang khôi phục webapp.asar gốc...");
     try {
         fs.rmSync(webappDir, { recursive: true, force: true });
         fs.renameSync(webappBackup, webappAsar);
@@ -92,6 +97,7 @@ function main(): void {
         throw e;
     }
 
+    setProgress(80, "Đang dọn config...");
     const configPath = userConfigPath();
     if (fs.existsSync(configPath)) {
         try {

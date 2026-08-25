@@ -10,9 +10,12 @@ Please see LICENSE files in the repository root for full details.
 //   - macOS: runs as a plain CLI (either directly, or captured+shown by the .app wrapper's own
 //     dialog) — printing to stdout and pausing for a keypress is enough.
 //   - Windows: compiled with --windows-hide-console, so there is no visible window at all —
-//     nothing printed to stdout would ever be seen. Show a native MessageBox instead.
+//     nothing printed to stdout would ever be seen. progress-win.ts's window (started by the
+//     caller via startProgress()) shows the final MessageBox itself once told the run is done; if
+//     that window never came up (PowerShell missing, etc.) fall back to a one-off MessageBox here.
 
 import fs from "node:fs";
+import { endProgress, progressActive } from "./progress-win";
 
 const logLines: string[] = [];
 
@@ -45,7 +48,16 @@ function showWindowsMessageBox(title: string, body: string, isError: boolean): v
 /** Ends the process, surfacing `logLines` (everything logged so far) to the user. Never returns. */
 export function finish(title: string, success: boolean): never {
     if (process.platform === "win32") {
-        showWindowsMessageBox(title, logLines.join("\n"), !success);
+        const body = logLines.join("\n");
+        if (progressActive()) {
+            endProgress(success, body);
+            // The progress window is a detached process polling the status file we just wrote —
+            // give it a moment to pick up the final update before this process exits, since
+            // nothing else keeps it alive.
+            Bun.sleepSync(150);
+        } else {
+            showWindowsMessageBox(title, body, !success);
+        }
     } else {
         console.log("\nNhấn phím bất kỳ để đóng cửa sổ này...");
         try {

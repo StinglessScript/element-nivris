@@ -1,0 +1,110 @@
+name: Build and publish installers
+
+# Builds the standalone macOS + Windows installer/uninstaller and republishes them onto the
+# "v1.0.0" GitHub Release, which is what the landing page's "releases/latest/download/..." links
+# point at (see docs/index.html) — so a push to main is what keeps those download links current.
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["docs/**", "**.md"]
+  workflow_dispatch:
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # matrix-js-sdk (a git dependency here) runs its own `pnpm build` prepare script on
+      # install — needs pnpm available even though this repo itself uses npm.
+      - run: corepack enable
+      - run: npm install
+
+      - name: Build installer + uninstaller .app bundles
+        run: bash scripts/build-standalone-mac.sh dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nivris-macos-installers
+          path: |
+            dist/NivrisInstaller-macOS.zip
+            dist/NivrisUninstaller-macOS.zip
+          retention-days: 30
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - run: corepack enable
+      - run: npm install
+      - run: npm run build
+
+      - name: Compile installer.exe
+        run: >
+          bun build --compile
+          --windows-hide-console
+          --windows-icon=assets/icons/AppIcon.ico
+          --windows-title="N.I.V.R.I.S. Installer"
+          --windows-publisher="N.I.V.R.I.S."
+          --windows-description="Cai dat N.I.V.R.I.S. cho Element Desktop"
+          ./scripts/standalone-installer.ts
+          --outfile dist/NivrisInstaller-Windows.exe
+
+      - name: Compile uninstaller.exe
+        run: >
+          bun build --compile
+          --windows-hide-console
+          --windows-icon=assets/icons/AppIcon.ico
+          --windows-title="N.I.V.R.I.S. Uninstaller"
+          --windows-publisher="N.I.V.R.I.S."
+          --windows-description="Go cai dat N.I.V.R.I.S. khoi Element Desktop"
+          ./scripts/standalone-uninstaller.ts
+          --outfile dist/NivrisUninstaller-Windows.exe
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nivris-windows-installers
+          path: |
+            dist/NivrisInstaller-Windows.exe
+            dist/NivrisUninstaller-Windows.exe
+          retention-days: 30
+
+  publish:
+    needs: [build-macos, build-windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: nivris-*-installers
+          merge-multiple: true
+          path: dist
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.0
+          name: "N.I.V.R.I.S. installers (v1)"
+          make_latest: "true"
+          files: |
+            dist/NivrisInstaller-macOS.zip
+            dist/NivrisUninstaller-macOS.zip
+            dist/NivrisInstaller-Windows.exe
+            dist/NivrisUninstaller-Windows.exe

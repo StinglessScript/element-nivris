@@ -17,6 +17,7 @@ import os from "node:os";
 
 import { finish, log as logRaw } from "./lib/finish";
 import { findElementResourcesDirWindows } from "./lib/find-element-windows.mjs";
+import { setProgress, startProgress } from "./lib/progress-win";
 
 // Embeds lib/index.js into the compiled binary; at runtime (compiled or not) this resolves to a
 // real file path on disk (Bun extracts embedded files to a temp dir when running as a compiled
@@ -107,8 +108,12 @@ function guardPermissionError(e: unknown, resourcesDir: string): never {
 }
 
 async function main(): Promise<void> {
+    startProgress(TITLE);
+    setProgress(10, "Đang tìm Element Desktop...");
+
     const resourcesDir = findElementApp();
     log(`Element resources: ${resourcesDir}`);
+    setProgress(25, "Đã tìm thấy Element.");
 
     const webappAsar = path.join(resourcesDir, "webapp.asar");
     const webappBackup = path.join(resourcesDir, "webapp.asar.nivris-backup");
@@ -116,6 +121,7 @@ async function main(): Promise<void> {
 
     if (!fs.existsSync(builtJsPath)) fail("Không tìm thấy module đã build bên trong file cài đặt này.");
 
+    setProgress(40, "Đang chuẩn bị webapp...");
     try {
         if (fs.existsSync(webappDir)) {
             log("webapp/ đã tồn tại (đã cài trước đó) — chỉ cập nhật module.");
@@ -141,6 +147,7 @@ async function main(): Promise<void> {
             fail(`Không tìm thấy webapp.asar tại ${resourcesDir} (đã cài rồi, hoặc bản Element này không dùng asar?).`);
         }
 
+        setProgress(65, "Đang copy module...");
         const modulesDir = path.join(webappDir, "modules");
         fs.mkdirSync(modulesDir, { recursive: true });
         // fs.copyFileSync can't read from Bun's virtual "$bunfs" embedded-asset path when running
@@ -151,6 +158,7 @@ async function main(): Promise<void> {
         guardPermissionError(e, resourcesDir);
     }
 
+    setProgress(85, "Đang cập nhật config...");
     const configPath = userConfigPath();
     fs.mkdirSync(path.dirname(configPath), { recursive: true });
     let config: { modules?: string[] } = {};
