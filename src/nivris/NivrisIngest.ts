@@ -5,18 +5,34 @@ SPDX-License-Identifier: AGPL-3.0-only OR GPL-3.0-only OR LicenseRef-Element-Com
 Please see LICENSE files in the repository root for full details.
 */
 
-import {
-    Direction,
-    EventType,
-    MatrixError,
-    MatrixEventEvent,
-    RoomEvent,
-    type EventTimeline,
-    type IRoomTimelineData,
-    type MatrixClient,
-    type MatrixEvent,
-    type Room,
+// Importing these five as VALUES from the "matrix-js-sdk/src/matrix" barrel (rather than as
+// types, which are erased and free) drags in ~64% of matrix-js-sdk's source by weight into this
+// module's bundle — the barrel re-exports the Room/Beacon/Poll/WebRTC models etc. alongside them,
+// and none of it tree-shakes away since the package doesn't declare "sideEffects": false. Only
+// MatrixError needs to stay a real import (its own file, http-api/errors.ts, is lightweight and
+// we need the actual class for `instanceof`); the other four are just stable, spec-level string
+// constants, inlined here instead.
+import { MatrixError } from "matrix-js-sdk/src/http-api/errors";
+// Type-only imports are erased entirely at build time (zero bundle cost) — safe to still pull
+// these types from the barrel even though the VALUE versions of the enums below are avoided.
+import type {
+    Direction as DirectionT,
+    EventTimeline,
+    EventType as EventTypeT,
+    IRoomTimelineData,
+    MatrixClient,
+    MatrixEvent,
+    MatrixEventEvent as MatrixEventEventT,
+    Room,
+    RoomEvent as RoomEventT,
 } from "matrix-js-sdk/src/matrix";
+
+// Cast to the specific member's literal type (`DirectionT.Backward`), not the broader enum union
+// — matrix-js-sdk's event-map overloads expect the precise member literal.
+const Direction = { Backward: "b" as DirectionT.Backward };
+const EventType = { RoomMessage: "m.room.message" as EventTypeT.RoomMessage };
+const MatrixEventEvent = { Decrypted: "Event.decrypted" as MatrixEventEventT.Decrypted };
+const RoomEvent = { Timeline: "Room.timeline" as RoomEventT.Timeline };
 
 import { getMatrixClient } from "../matrixClient";
 import {

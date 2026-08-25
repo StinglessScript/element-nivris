@@ -93,12 +93,17 @@ const PRIORITY_COLORS: TrackerPriorityItem["color"][] = ["blue", "orange", "viol
  * Computes real metrics for a tracker from the local realtime message cache — no network calls,
  * no full-day dump, just a keyword search scoped to this one tracker.
  */
-async function findMatches(tracker: NivrisUserTracker): Promise<StoredNivrisMessage[]> {
+/**
+ * `preloaded` lets a caller scoring several trackers in one pass (e.g. NivrisWorkspace's periodic
+ * refresh) share a single `getMessagesSince(startOfToday())` read instead of each tracker
+ * re-querying IndexedDB independently.
+ */
+async function findMatches(tracker: NivrisUserTracker, preloaded?: StoredNivrisMessage[]): Promise<StoredNivrisMessage[]> {
     const sinceTs = startOfToday();
+    const all = preloaded ?? (await getMessagesSince(sinceTs));
 
     // Picked from the entity picker (real userId/roomId) — match exactly instead of by fuzzy name.
     if (tracker.targetId && (tracker.type === "boss" || tracker.type === "group")) {
-        const all = await getMessagesSince(sinceTs);
         const field = tracker.type === "boss" ? "sender" : "roomId";
         return all
             .filter((m) => m[field] === tracker.targetId)
@@ -106,15 +111,15 @@ async function findMatches(tracker: NivrisUserTracker): Promise<StoredNivrisMess
             .slice(0, MAX_MATCHES);
     }
 
-    if (tracker.type === "mention") return getMentions(sinceTs, MAX_MATCHES);
+    if (tracker.type === "mention") return getMentions(sinceTs, MAX_MATCHES, all);
 
     const keywords = keywordsForTracker(tracker);
     if (!keywords.length) return [];
-    return searchMessages(keywords, sinceTs, MAX_MATCHES);
+    return searchMessages(keywords, sinceTs, MAX_MATCHES, all);
 }
 
-export async function computeTrackerMetrics(tracker: NivrisUserTracker): Promise<TrackerMetrics> {
-    const matches = await findMatches(tracker);
+export async function computeTrackerMetrics(tracker: NivrisUserTracker, preloaded?: StoredNivrisMessage[]): Promise<TrackerMetrics> {
+    const matches = await findMatches(tracker, preloaded);
     if (!matches.length) return EMPTY_METRICS;
 
     const myUserId = getMatrixClient().getUserId();

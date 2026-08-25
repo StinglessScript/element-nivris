@@ -127,8 +127,22 @@ export function startThreadPanelIconInjector(api: Api): () => void {
         document.querySelectorAll(HEADER_TITLE_SELECTOR).forEach(mountInto);
     };
 
+    // Element's chat DOM churns constantly (new messages, read receipts, typing indicators —
+    // this observer is watching the whole document.body, for the entire session, not just while
+    // the Thread panel is open). Coalescing bursts into at most one scan per animation frame
+    // keeps that from turning into hundreds of querySelectorAll passes per minute.
+    let scanScheduled = false;
+    const scheduleScan = (): void => {
+        if (scanScheduled) return;
+        scanScheduled = true;
+        requestAnimationFrame(() => {
+            scanScheduled = false;
+            scan();
+        });
+    };
+
     scan();
-    const observer = new MutationObserver(scan);
+    const observer = new MutationObserver(scheduleScan);
     observer.observe(document.body, { childList: true, subtree: true });
 
     return () => observer.disconnect();

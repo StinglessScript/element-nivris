@@ -87,12 +87,21 @@ export async function getMessagesSince(sinceTs: number): Promise<StoredNivrisMes
  * Naive local keyword search over the cached messages (room name or body containing any of the
  * given keywords, case-insensitively), most recent first. Used to pull only the relevant slice of
  * cached history into a prompt on demand, instead of ever dumping the whole cache.
+ *
+ * Pass `preloaded` when the caller already has a `getMessagesSince(sinceTs)` result in hand (e.g.
+ * scoring several trackers against the same today's-messages snapshot) to skip a redundant
+ * IndexedDB read.
  */
-export async function searchMessages(keywords: string[], sinceTs = 0, limit = 40): Promise<StoredNivrisMessage[]> {
+export async function searchMessages(
+    keywords: string[],
+    sinceTs = 0,
+    limit = 40,
+    preloaded?: StoredNivrisMessage[],
+): Promise<StoredNivrisMessage[]> {
     if (!keywords.length) return [];
     const lowerKeywords = keywords.map((k) => k.toLowerCase());
 
-    const all = await getMessagesSince(sinceTs);
+    const all = preloaded ?? (await getMessagesSince(sinceTs));
     const matches = all.filter((m) => {
         const haystack = `${m.roomName} ${m.body}`.toLowerCase();
         return lowerKeywords.some((k) => haystack.includes(k));
@@ -147,8 +156,8 @@ export async function getThreadsForRoom(roomId: string): Promise<ThreadSummaryMe
 }
 
 /** Messages that mention the local user, most recent first. */
-export async function getMentions(sinceTs = 0, limit = 40): Promise<StoredNivrisMessage[]> {
-    const all = await getMessagesSince(sinceTs);
+export async function getMentions(sinceTs = 0, limit = 40, preloaded?: StoredNivrisMessage[]): Promise<StoredNivrisMessage[]> {
+    const all = preloaded ?? (await getMessagesSince(sinceTs));
     const matches = all.filter((m) => m.mentionsMe);
     matches.sort((a, b) => b.ts - a.ts);
     return matches.slice(0, limit);

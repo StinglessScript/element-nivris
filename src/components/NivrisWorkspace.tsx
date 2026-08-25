@@ -44,7 +44,7 @@ import NivrisTaskStore, {
     type NivrisTask,
     type NivrisTaskStatus,
 } from "../nivris/NivrisTaskStore";
-import { ensureNivrisIngestStarted, rescanToday, runReportReminderCheckNow } from "../nivris/NivrisIngest";
+import { ensureNivrisIngestStarted, rescanToday, runReportReminderCheckNow, startOfToday } from "../nivris/NivrisIngest";
 import { getMatrixClient } from "../matrixClient";
 import { clearAllMessages, getMessagesByThreadRoot, getMessagesSince, type StoredNivrisMessage } from "../nivris/NivrisMessageDb";
 import NivrisEntityPicker, { type NivrisPickerEntity } from "./NivrisEntityPicker";
@@ -139,8 +139,10 @@ const NivrisWorkspace: React.FC = () => {
     useEffect(() => {
         let cancelled = false;
         const refresh = async (): Promise<void> => {
+            // Shared across every tracker so N trackers cost 1 IndexedDB scan per tick, not N.
+            const todayMessages = await getMessagesSince(startOfToday());
             const entries = await Promise.all(
-                trackers.map(async (t) => [t.id, await computeTrackerMetrics(t)] as const),
+                trackers.map(async (t) => [t.id, await computeTrackerMetrics(t, todayMessages)] as const),
             );
             if (!cancelled) setMetricsMap(Object.fromEntries(entries));
         };
