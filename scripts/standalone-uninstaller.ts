@@ -15,6 +15,7 @@ import path from "node:path";
 import os from "node:os";
 
 import { finish, log as logRaw } from "./lib/finish";
+import { findElementResourcesDirWindows } from "./lib/find-element-windows.mjs";
 
 const TITLE = "Gỡ N.I.V.R.I.S.";
 
@@ -42,12 +43,9 @@ function findElementApp(): string {
     }
 
     if (process.platform === "win32") {
-        const base = path.join(process.env.LOCALAPPDATA ?? "", "Element");
-        if (!process.env.LOCALAPPDATA || !fs.existsSync(base)) fail(`Không tìm thấy ${base}.`);
-        const versions = fs.readdirSync(base).filter((d) => d.startsWith("app-"));
-        if (!versions.length) fail(`Không tìm thấy thư mục app-* trong ${base}.`);
-        versions.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-        return resourcesDirFromAppPath(path.join(base, versions[versions.length - 1]));
+        const found = findElementResourcesDirWindows();
+        if (!found) fail("Không tìm thấy Element Desktop (đã thử các vị trí cài thường gặp và Windows registry).");
+        return found;
     }
 
     fail(`Chưa hỗ trợ nền tảng: ${process.platform} (bản standalone hiện chỉ có cho macOS và Windows).`);

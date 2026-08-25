@@ -12,6 +12,7 @@ Please see LICENSE files in the repository root for full details.
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { findElementResourcesDirWindows } from "./lib/find-element-windows.mjs";
 
 function log(msg) {
     console.log(`[nivris-uninstall] ${msg}`);
@@ -36,12 +37,9 @@ function findElementApp() {
     }
 
     if (process.platform === "win32") {
-        const base = path.join(process.env.LOCALAPPDATA ?? "", "Element");
-        if (!process.env.LOCALAPPDATA || !fs.existsSync(base)) fail(`Không tìm thấy ${base}.`);
-        const versions = fs.readdirSync(base).filter((d) => d.startsWith("app-"));
-        if (!versions.length) fail(`Không tìm thấy thư mục app-* trong ${base}.`);
-        versions.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-        return resourcesDirFromAppPath(path.join(base, versions[versions.length - 1]));
+        const found = findElementResourcesDirWindows();
+        if (!found) fail("Không tìm thấy Element Desktop (đã thử các vị trí cài thường gặp và Windows registry).");
+        return found;
     }
 
     if (process.platform === "linux") {

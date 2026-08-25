@@ -24,6 +24,7 @@ import path from "node:path";
 import os from "node:os";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { findElementResourcesDirWindows } from "./lib/find-element-windows.mjs";
 
 const moduleDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const isWin = process.platform === "win32";
@@ -60,17 +61,16 @@ function findElementApp() {
     }
 
     if (process.platform === "win32") {
-        const base = path.join(process.env.LOCALAPPDATA ?? "", "Element");
-        if (!process.env.LOCALAPPDATA || !fs.existsSync(base)) {
+        const found = findElementResourcesDirWindows();
+        if (!found) {
             fail(
-                `Không tìm thấy ${base}.\n` +
-                    "Cài Element Desktop trước, hoặc chạy lại với ELEMENT_APP_PATH=C:\\duong\\dan\\app-x.y.z",
+                "Không tìm thấy Element Desktop (đã thử %LOCALAPPDATA%\\Element, %LOCALAPPDATA%\\Programs\\Element,\n" +
+                    "Program Files, và Windows registry).\n" +
+                    "Cài Element Desktop (bản .exe thường từ element.io, không phải Microsoft Store) trước,\n" +
+                    "hoặc chạy lại với ELEMENT_APP_PATH=C:\\duong\\dan\\app-x.y.z nếu bạn biết đường dẫn thật.",
             );
         }
-        const versions = fs.readdirSync(base).filter((d) => d.startsWith("app-"));
-        if (!versions.length) fail(`Không tìm thấy thư mục app-* (bản cài Squirrel) trong ${base}.`);
-        versions.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-        return resourcesDirFromAppPath(path.join(base, versions[versions.length - 1]));
+        return found;
     }
 
     if (process.platform === "linux") {
