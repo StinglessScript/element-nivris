@@ -76,6 +76,18 @@ function writeStatus(s: Status): void {
     }
 }
 
+/** Quotes one command-line argument for a Windows argv-style command line (cmd.exe / CreateProcess
+ * conventions — not shell quoting, there's no shell involved). */
+function quoteArg(arg: string): string {
+    if (arg.length > 0 && !/[\s"]/.test(arg)) return arg;
+    return `"${arg.replace(/"/g, '\\"')}"`;
+}
+
+/** Escapes a string for embedding inside a VBScript double-quoted string literal. */
+function vbsEscape(s: string): string {
+    return s.replace(/"/g, '""');
+}
+
 /** Spawns the detached progress window. No-op outside Windows. */
 export function startProgress(title: string): void {
     if (process.platform !== "win32") return;
@@ -85,27 +97,35 @@ export function startProgress(title: string): void {
         const scriptFile = path.join(dir, "progress.ps1");
         fs.writeFileSync(scriptFile, PS_SCRIPT);
         writeStatus({ percent: 0, label: "Dang chuan bi...", done: false });
-        Bun.spawn(
-            [
-                "powershell",
-                "-NoProfile",
-                "-NonInteractive",
-                "-ExecutionPolicy",
-                "Bypass",
-                "-WindowStyle",
-                "Hidden",
-                "-File",
-                scriptFile,
-                "-StatusFile",
-                statusFile,
-                "-Title",
-                title,
-            ],
-            { stdout: "ignore", stderr: "ignore", stdin: "ignore" },
+
+        // Launched via WScript.Shell.Run (window style 0 = hidden) rather than
+        // `powershell -WindowStyle Hidden` directly: PowerShell/conhost still briefly allocates a
+        // visible console before applying that style, which flashes on screen for an instant.
+        // WScript.Shell.Run creates the process hidden from the start — no console ever appears.
+        const psCommandLine = [
+            "powershell.exe",
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            scriptFile,
+            "-StatusFile",
+            statusFile,
+            "-Title",
+            title,
+        ]
+            .map(quoteArg)
+            .join(" ");
+        const vbsFile = path.join(dir, "launch.vbs");
+        fs.writeFileSync(
+            vbsFile,
+            `CreateObject("WScript.Shell").Run "${vbsEscape(psCommandLine)}", 0, False\n`,
         );
+        Bun.spawn(["wscript.exe", "//B", "//NoLogo", vbsFile], { stdout: "ignore", stderr: "ignore", stdin: "ignore" });
     } catch {
-        // PowerShell missing or unspawnable — fall back to no progress window at all; finish()
-        // still needs to show *something*, handled by its own fallback when statusFile is null.
+        // PowerShell/WScript missing or unspawnable — fall back to no progress window at all;
+        // finish() still needs to show *something*, handled by its own fallback when statusFile is null.
         statusFile = null;
     }
 }

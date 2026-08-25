@@ -18,6 +18,7 @@ import os from "node:os";
 import { finish, log as logRaw } from "./lib/finish";
 import { findElementResourcesDirWindows } from "./lib/find-element-windows.mjs";
 import { setProgress, startProgress } from "./lib/progress-win";
+import { quitElementIfRunning } from "./lib/quit-element";
 
 // Embeds lib/index.js into the compiled binary; at runtime (compiled or not) this resolves to a
 // real file path on disk (Bun extracts embedded files to a temp dir when running as a compiled
@@ -96,11 +97,9 @@ function guardPermissionError(e: unknown, resourcesDir: string): never {
     }
     if (err && err.code === "EBUSY") {
         fail(
-            "Element đang chạy nên file đang bị khoá, không sửa được.\n" +
+            "Element vẫn đang chạy nên file đang bị khoá, không sửa được (đã thử tự tắt nhưng không thành công).\n" +
                 (process.platform === "win32"
-                    ? "Element hay ẩn xuống khay hệ thống (system tray, cạnh đồng hồ) thay vì thoát hẳn khi đóng cửa sổ.\n" +
-                      "Chuột phải vào icon Element trong khay hệ thống → Quit/Exit (hoặc mở Task Manager, End Task mọi\n" +
-                      "tiến trình 'Element'), rồi chạy lại file này."
+                    ? "Mở Task Manager, End Task mọi tiến trình 'Element', rồi chạy lại file này."
                     : "Tắt hẳn Element (Cmd+Q, không chỉ đóng cửa sổ) rồi chạy lại file này."),
         );
     }
@@ -109,8 +108,13 @@ function guardPermissionError(e: unknown, resourcesDir: string): never {
 
 async function main(): Promise<void> {
     startProgress(TITLE);
-    setProgress(10, "Đang tìm Element Desktop...");
+    setProgress(5, "Đang kiểm tra Element...");
+    await quitElementIfRunning((msg) => {
+        log(msg);
+        setProgress(10, msg);
+    });
 
+    setProgress(15, "Đang tìm Element Desktop...");
     const resourcesDir = findElementApp();
     log(`Element resources: ${resourcesDir}`);
     setProgress(25, "Đã tìm thấy Element.");
