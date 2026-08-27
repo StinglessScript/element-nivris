@@ -1154,7 +1154,18 @@ body[class*="cpd-theme-dark"] {
     font-family: var(--jv-sans);
 }
 .mx_NivrisUpdateBanner_text { font: 400 12px var(--jv-sans); color: var(--jv-ink); white-space: pre-line; }
-.mx_NivrisUpdateBanner_text_error { color: var(--jv-danger); max-width: 420px; }
+.mx_NivrisUpdateBanner_cmd {
+    display: block;
+    width: 100%;
+    padding: 6px 8px;
+    border-radius: 4px;
+    background-color: var(--jv-surface-alt);
+    border: 1px solid var(--jv-border);
+    font: 400 10.5px var(--jv-mono);
+    color: var(--jv-ink);
+    overflow-x: auto;
+    white-space: pre;
+}
 .mx_NivrisUpdateBanner_btn {
     flex-shrink: 0;
     height: 26px;

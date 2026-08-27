@@ -8,5 +8,4 @@ Please see LICENSE files in the repository root for full details.
 /// <reference types="@arcmantle/vite-plugin-import-css-sheet/client" />
 
 // Baked in at build time by vite.config.ts's `define` — see scripts/install-nivris.mjs.
-declare const __NIVRIS_UPDATE_TOKEN__: string;
-declare const __NIVRIS_UPDATE_PORT__: string;
+declare const __NIVRIS_BUILD_SHA__: string;

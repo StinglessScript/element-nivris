@@ -5,48 +5,14 @@ SPDX-License-Identifier: AGPL-3.0-only OR GPL-3.0-only OR LicenseRef-Element-Com
 Please see LICENSE files in the repository root for full details.
 */
 
-// Shared patch logic used by both the one-shot `nivris-install` CLI and the persistent
-// nivris-update-helper background service, so the two never drift apart. Everything here is pure
-// Node (no Bun-only APIs) since the helper runs under a plain `node` invocation registered in a
-// LaunchAgent/Scheduled Task/systemd unit, not a compiled Bun binary.
+// Shared patch logic used by scripts/install-nivris.mjs, scripts/uninstall-nivris.mjs, and the
+// standalone Bun-compiled installer/uninstaller.
 
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import https from "node:https";
 import { spawnSync } from "node:child_process";
 import { findElementResourcesDirWindows } from "./find-element-windows.mjs";
-
-/** Follows redirects (GitHub's release download URLs 302 to S3) — Node's https module doesn't. */
-export function downloadFile(url, destPath, maxRedirects = 5) {
-    return new Promise((resolve, reject) => {
-        const req = https.get(url, { headers: { "user-agent": "nivris-update-helper" } }, (res) => {
-            if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-                res.resume();
-                if (maxRedirects <= 0) return reject(new Error("Quá nhiều redirect."));
-                return resolve(downloadFile(res.headers.location, destPath, maxRedirects - 1));
-            }
-            if (res.statusCode !== 200) {
-                res.resume();
-                return reject(new Error(`Tải thất bại (HTTP ${res.statusCode}): ${url}`));
-            }
-            const file = fs.createWriteStream(destPath);
-            res.pipe(file);
-            file.on("finish", () => file.close(resolve));
-            file.on("error", reject);
-        });
-        req.on("error", reject);
-    });
-}
-
-// The CI-published `nivris-module.js` (see .github/workflows/release.yml) is one shared public
-// build for every user, so it can't have any one user's real update-helper token baked in at
-// build time the way a local `nivris-install` run does. CI bakes in this literal placeholder
-// instead; applyNivrisUpdate() text-substitutes it for the real per-machine token (already sitting
-// in the local helper-config.json, unaffected by re-downloading a new module build) before writing
-// the file into webapp/modules/ — safe to do after minification since minifiers don't rewrite
-// string-literal contents, only identifiers.
-export const TOKEN_PLACEHOLDER = "__NIVRIS_TOKEN_PLACEHOLDER__";
 
 export function resourcesDirFromAppPath(appPath) {
     return process.platform === "darwin" ? path.join(appPath, "Contents/Resources") : path.join(appPath, "resources");
@@ -135,80 +101,21 @@ export function buildModule({ moduleDir, log, fail, env }) {
     if (res.status !== 0) fail("Build thất bại — xem log phía trên.");
 }
 
-/**
- * Best-effort native prompt for the one-time macOS permission grant a fresh background-helper
- * install needs (see guardPermissionError's "helper" branch doc comment). Mirrors the
- * "Đóng"/"Mở Cài đặt" dialog scripts/build-app-bundle.sh already shows for the compiled
- * installer/uninstaller — same one-click deep link to the right Settings pane — plus copies the
- * exact binary path to the clipboard first, since the Settings "+" file picker has no way to jump
- * straight to a hidden, deeply-nested nvm path otherwise (Cmd+Shift+G then Cmd+V gets there in two
- * keystrokes instead of manual Finder navigation).
- */
-function promptMacAppManagementGrant(execPath) {
-    try {
-        spawnSync("pbcopy", { input: execPath });
-    } catch {
-        // clipboard copy is a nicety, not required — dialog text below still has the raw path
-    }
-    const msg =
-        `Cần cấp quyền cho tiến trình cập nhật nền (đã copy đường dẫn vào clipboard):\\n${execPath}\\n\\n` +
-        `Bấm "Mở Cài đặt" → bấm "+" → Cmd+Shift+G → Cmd+V → Enter → Open → bật toggle lên.\\n` +
-        `Rồi quay lại app, bấm Cập nhật lại.`;
-    try {
-        const choice = spawnSync("osascript", [
-            "-e",
-            `display dialog "${msg}" with title "N.I.V.R.I.S. — Cần cấp quyền" buttons {"Đóng", "Mở Cài đặt"} default button "Mở Cài đặt" with icon caution`,
-            "-e",
-            "button returned of result",
-        ]);
-        if ((choice.stdout ?? "").toString().trim() === "Mở Cài đặt") {
-            spawnSync("open", ["x-apple.systempreferences:com.apple.preference.security?Privacy_AppManagement"]);
-        }
-    } catch {
-        // best-effort — the thrown error's own text still has the manual instructions
-    }
-}
-
-/** Builds the "no write permission" message for `resourcesDir`, with macOS's helper-vs-CLI
- * distinction (see promptMacAppManagementGrant's doc comment). Also fires the best-effort native
- * dialog as a side effect when `errorContext === "helper"` on macOS. Shared by the exception-driven
- * path (guardPermissionError, an actual write already failed) and the preflight path
- * (checkWritePermission, called before quitting Element at all so a doomed update never has to). */
-function permissionErrorMessage(resourcesDir, errorContext) {
-    if (process.platform === "darwin") {
-        if (errorContext === "helper") {
-            // macOS's "App Management" TCC grant is per requesting-process — Terminal already has
-            // it (that's how the initial `nivris-install` run worked), but the background helper is
-            // a *different* process (node, run via LaunchAgent, no Terminal involved) that's never
-            // been granted it, so it needs its own separate grant. One-time only: once granted, this
-            // exact node binary keeps working for every future update.
-            promptMacAppManagementGrant(process.execPath);
-            return (
+export function guardPermissionError(e, resourcesDir, { fail }) {
+    if (e && (e.code === "EPERM" || e.code === "EACCES")) {
+        if (process.platform === "darwin") {
+            fail(
                 `Không có quyền ghi vào ${resourcesDir}.\n` +
-                "Tiến trình cập nhật nền (node) chưa được cấp quyền 'App Management' — quyền này tính riêng theo\n" +
-                "từng tiến trình, được cấp cho Terminal không có nghĩa là helper chạy nền cũng có.\n" +
-                `Mở System Settings → Privacy & Security → App Management → bấm "+" → chọn file:\n` +
-                `  ${process.execPath}\n` +
-                "rồi bật nó lên. Sau đó thử bấm Cập nhật lại trong app."
+                    "macOS chặn ghi vào bên trong .app trong /Applications trừ khi Terminal (hoặc app đang chạy lệnh này)\n" +
+                    "được cấp quyền 'App Management':\n" +
+                    "  System Settings → Privacy & Security → App Management → bật cho Terminal/app của bạn,\n" +
+                    "  rồi khởi động lại Terminal và chạy lại lệnh này.",
             );
         }
-        return (
-            `Không có quyền ghi vào ${resourcesDir}.\n` +
-            "macOS chặn ghi vào bên trong .app trong /Applications trừ khi Terminal (hoặc app đang chạy lệnh này)\n" +
-            "được cấp quyền 'App Management':\n" +
-            "  System Settings → Privacy & Security → App Management → bật cho Terminal/app của bạn,\n" +
-            "  rồi khởi động lại Terminal và chạy lại lệnh này."
-        );
-    }
-    if (process.platform === "linux") {
-        return `Không có quyền ghi vào ${resourcesDir}. Chạy lại với sudo (ví dụ: sudo npx -p github:StinglessScript/element-nivris nivris-install).`;
-    }
-    return `Không có quyền ghi vào ${resourcesDir}. Thử chạy lại với quyền Administrator.`;
-}
-
-export function guardPermissionError(e, resourcesDir, { fail, errorContext = "cli" }) {
-    if (e && (e.code === "EPERM" || e.code === "EACCES")) {
-        fail(permissionErrorMessage(resourcesDir, errorContext));
+        if (process.platform === "linux") {
+            fail(`Không có quyền ghi vào ${resourcesDir}. Chạy lại với sudo (ví dụ: sudo npx -p github:StinglessScript/element-nivris nivris-install).`);
+        }
+        fail(`Không có quyền ghi vào ${resourcesDir}. Thử chạy lại với quyền Administrator.`);
     }
     if (e && e.code === "EBUSY") {
         fail(
@@ -224,53 +131,13 @@ export function guardPermissionError(e, resourcesDir, { fail, errorContext = "cl
 }
 
 /**
- * Preflight: throws the same styled permission error as guardPermissionError, but *before*
- * anything has been touched — call this ahead of quitElementIfRunning() so a doomed update never
- * has to close Element at all. Returns silently if the write test succeeds.
+ * Applies the Nivris patch to the found Element install: builds the module, extracts webapp.asar
+ * (idempotent — safe to call again on an already-patched install), copies the built module in,
+ * and registers it in config.json. `moduleDir` is the repo root (where package.json/vite.config.ts
+ * live); `env` is passed through to the vite build step (used to bake in the build SHA — see
+ * install-nivris.mjs and src/nivris/NivrisUpdateChecker.ts).
  */
-export function checkWritePermission(resourcesDir, errorContext) {
-    if (!canWriteToResourcesDir(resourcesDir)) {
-        throw new Error(permissionErrorMessage(resourcesDir, errorContext));
-    }
-}
-
-/**
- * Applies the Nivris patch to the found Element install: gets a built `nivris.js`, extracts
- * webapp.asar (idempotent — safe to call again on an already-patched install), copies the module
- * in, and registers it in config.json.
- *
- * Two ways to supply the built JS:
- *   - `moduleDir` (repo root, has package.json/vite.config.ts) — runs `vite build` there. Used by
- *     the one-shot `nivris-install` CLI, which already has the full repo on disk via npx.
- *   - `builtJsPath` — an already-built index.js, used as-is. Used by the background updater
- *     helper, which downloads a prebuilt module from the latest GitHub Release instead of rebuilding
- *     from source on the user's machine (no git/npm-install/vite-build needed at update time).
- * Exactly one of the two must be given.
- *
- * `realToken`, when given, text-substitutes TOKEN_PLACEHOLDER for the real per-machine token in
- * the built JS before it's copied in — needed when `builtJsPath` points at the shared public CI
- * build (see TOKEN_PLACEHOLDER's doc comment above).
- */
-/**
- * Actually attempts a throwaway write inside `resourcesDir` and immediately removes it — macOS's
- * "App Management" TCC restriction isn't reflected in POSIX permission bits at all (fs.access()
- * would report the path as normally writable), so the only reliable way to know whether a write
- * will succeed is to try one. Used as a preflight so the background helper can fail fast on a
- * permission problem *before* quitting Element, instead of only discovering it after Element is
- * already closed for no reason.
- */
-export function canWriteToResourcesDir(resourcesDir) {
-    const probePath = path.join(resourcesDir, ".nivris-write-test");
-    try {
-        fs.writeFileSync(probePath, "");
-        fs.rmSync(probePath, { force: true });
-        return true;
-    } catch {
-        return false;
-    }
-}
-
-export async function applyNivrisUpdate({ moduleDir, builtJsPath, realToken, env = {}, onStatus, errorContext = "cli" }) {
+export async function applyNivrisUpdate({ moduleDir, env = {}, onStatus }) {
     const log = (msg) => onStatus?.(msg);
     const fail = (msg) => {
         throw new Error(msg);
@@ -283,12 +150,10 @@ export async function applyNivrisUpdate({ moduleDir, builtJsPath, realToken, env
     const webappBackup = path.join(resourcesDir, "webapp.asar.nivris-backup");
     const webappDir = path.join(resourcesDir, "webapp");
 
-    let builtJs = builtJsPath;
-    if (!builtJs) {
-        buildModule({ moduleDir, log, fail, env });
-        builtJs = path.join(moduleDir, "lib/index.js");
-    }
-    if (!fs.existsSync(builtJs)) fail(`Không tìm thấy module đã build tại ${builtJs}.`);
+    buildModule({ moduleDir, log, fail, env });
+
+    const builtJs = path.join(moduleDir, "lib/index.js");
+    if (!fs.existsSync(builtJs)) fail("Không tìm thấy lib/index.js sau khi build.");
 
     try {
         if (fs.existsSync(webappDir)) {
@@ -312,17 +177,12 @@ export async function applyNivrisUpdate({ moduleDir, builtJsPath, realToken, env
 
         const modulesDir = path.join(webappDir, "modules");
         fs.mkdirSync(modulesDir, { recursive: true });
-        if (realToken) {
-            const contents = fs.readFileSync(builtJs, "utf-8").split(TOKEN_PLACEHOLDER).join(realToken);
-            fs.writeFileSync(path.join(modulesDir, "nivris.js"), contents);
-        } else {
-            fs.copyFileSync(builtJs, path.join(modulesDir, "nivris.js"));
-        }
+        fs.copyFileSync(builtJs, path.join(modulesDir, "nivris.js"));
         const map = `${builtJs}.map`;
         if (fs.existsSync(map)) fs.copyFileSync(map, path.join(modulesDir, "nivris.js.map"));
         log("Đã copy nivris.js vào webapp/modules/");
     } catch (e) {
-        guardPermissionError(e, resourcesDir, { fail, errorContext });
+        guardPermissionError(e, resourcesDir, { fail });
     }
 
     const configPath = userConfigPath({ fail });
@@ -350,92 +210,4 @@ export async function applyNivrisUpdate({ moduleDir, builtJsPath, realToken, env
     }
 
     return { resourcesDir, webappDir };
-}
-
-function isRunningWindows() {
-    try {
-        const out = spawnSync("tasklist", ["/FI", "IMAGENAME eq Element.exe", "/FO", "CSV", "/NH"], { encoding: "utf-8" });
-        return (out.stdout ?? "").toLowerCase().includes("element.exe");
-    } catch {
-        return false;
-    }
-}
-
-function isRunningMac() {
-    try {
-        return spawnSync("pgrep", ["-x", "Element"]).status === 0;
-    } catch {
-        return false;
-    }
-}
-
-async function waitUntilClosed(isRunning, timeoutMs) {
-    const start = Date.now();
-    while (isRunning()) {
-        if (Date.now() - start > timeoutMs) return false;
-        await new Promise((resolve) => setTimeout(resolve, 300));
-    }
-    return true;
-}
-
-/**
- * Best-effort graceful-then-forceful quit, mirroring scripts/lib/quit-element.ts (that file is
- * Bun-only — uses Bun.spawnSync — so it can't be imported by this plain-Node helper; kept in sync
- * by hand). Never throws.
- */
-export async function quitElementIfRunning(onStatus) {
-    if (process.platform === "win32") {
-        if (!isRunningWindows()) return true;
-        onStatus?.("Element đang chạy — đang tắt...");
-        try {
-            spawnSync("taskkill", ["/IM", "Element.exe", "/T"]);
-        } catch {
-            // ignore
-        }
-        if (await waitUntilClosed(isRunningWindows, 5000)) return true;
-        try {
-            spawnSync("taskkill", ["/IM", "Element.exe", "/T", "/F"]);
-        } catch {
-            // ignore
-        }
-        return waitUntilClosed(isRunningWindows, 5000);
-    }
-
-    if (process.platform === "darwin") {
-        if (!isRunningMac()) return true;
-        onStatus?.("Element đang chạy — đang tắt...");
-        try {
-            spawnSync("osascript", ["-e", 'tell application "Element" to quit']);
-        } catch {
-            // ignore
-        }
-        if (await waitUntilClosed(isRunningMac, 5000)) return true;
-        try {
-            spawnSync("pkill", ["-x", "Element"]);
-        } catch {
-            // ignore
-        }
-        return waitUntilClosed(isRunningMac, 5000);
-    }
-
-    return true;
-}
-
-/** Best-effort relaunch after a helper-driven update — the user never touches a terminal for this. */
-export function relaunchElement() {
-    try {
-        if (process.platform === "darwin") {
-            spawnSync("open", ["-a", "Element"]);
-        } else if (process.platform === "win32") {
-            const resourcesDir = findElementApp({ fail: () => {} });
-            if (resourcesDir) {
-                const exe = path.join(path.dirname(resourcesDir), "Element.exe");
-                if (fs.existsSync(exe)) spawnSync(exe, [], { detached: true, stdio: "ignore" });
-            }
-        } else if (process.platform === "linux") {
-            spawnSync("element-desktop", [], { detached: true, stdio: "ignore" });
-        }
-    } catch {
-        // best-effort — banner still tells the user to reopen Element manually if this silently fails
-    }
 }
