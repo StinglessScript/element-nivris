@@ -6,8 +6,9 @@ SPDX-License-Identifier: AGPL-3.0-only OR GPL-3.0-only OR LicenseRef-Element-Com
 Please see LICENSE files in the repository root for full details.
 */
 
-// Persistent background service, registered as a LaunchAgent (macOS) / Scheduled Task (Windows) /
-// systemd --user unit (Linux) by install-nivris.mjs, so the in-app update banner
+// Persistent background service (started at login, lives across Element restarts), registered as
+// a LaunchAgent (macOS) / Scheduled Task (Windows) / systemd --user unit (Linux) by
+// install-nivris.mjs, so the in-app update banner
 // (src/nivris/NivrisUpdateChecker.ts) can apply updates without ever opening a terminal. Listens
 // on 127.0.0.1 only, gated by a token baked into both this helper's own config and the built
 // module bundle at install time (neither side ever transmits it — see install-nivris.mjs).
