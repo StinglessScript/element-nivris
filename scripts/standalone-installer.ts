@@ -27,14 +27,16 @@ import { helperInstallDir, registerHelperService } from "./lib/updater-service.m
 // executable). Run `npm run build` before compiling so this file exists to embed.
 import builtJsPath from "../lib/index.js" with { type: "file" };
 
-// The persistent update helper is itself a separately bun-compiled, self-contained binary (see
-// .github/workflows/release.yml — compiled from nivris-update-helper.mjs *before* this installer,
-// so it exists on disk to embed here) rather than a plain .mjs script: this installer has no
-// surrounding `scripts/` checkout on disk, and no guarantee of a system Node/Bun install, for a
-// LaunchAgent/Scheduled Task to later run a script *with*. Always named with a literal ".exe" even
-// on macOS (harmless — Unix doesn't care about extensions) so this same import path resolves on
-// both platforms' separate compile jobs. See installHelperFilesStandalone() below.
-import helperBinaryPath from "../dist/nivris-update-helper-bin.exe" with { type: "file" };
+// The persistent update helper needs to be a self-contained executable too (no surrounding
+// `scripts/` checkout on disk, no guaranteed system Node/Bun install, for a LaunchAgent/Scheduled
+// Task to later run a script *with*) — but compiling it as a *separate* `bun build --compile`
+// binary and embedding those bytes here (an earlier version of this file did that) roughly doubled
+// the installer's download size, since each `bun build --compile` output embeds a full copy of the
+// Bun runtime. Instead, this installer just copies *itself* to become the helper (see
+// installHelperFilesStandalone()) and re-execs with an internal flag — see the `--run-helper`
+// check right below main()'s definition — reusing the one Bun runtime already being downloaded
+// anyway rather than shipping a second one.
+const RUN_HELPER_FLAG = "--run-helper";
 
 // Baked in by `bun build --compile --define` at CI build time (see .github/workflows/release.yml)
 // — this compiled binary has no git checkout to read a commit SHA from at runtime, and the module
@@ -53,17 +55,17 @@ function log(msg: string): void {
 /**
  * Standalone-binary equivalent of scripts/lib/updater-service.mjs's installHelperFiles() — that
  * version copies the plain-.mjs helper + its ./lib deps from a real `scripts/` checkout on disk,
- * which doesn't exist here. The compiled helper binary is embedded at compile time (import above);
- * Bun extracts it to a real temp path at runtime, readable via fs.readFileSync but not
- * copyFileSync (same restriction noted for builtJsPath above), so this reads and rewrites its
- * bytes instead of copying the file — and sets the executable bit, which a plain byte copy doesn't
- * preserve on macOS/Linux.
+ * which doesn't exist here. Copies *this installer's own compiled executable* (process.execPath)
+ * to become the future helper binary instead — it gets re-invoked with the `--run-helper` flag
+ * (see below), which runs the helper server logic in-process rather than the install logic. Plain
+ * fs.copyFileSync (not the embedded-asset read/rewrite pattern used elsewhere in this file) works
+ * fine here since process.execPath is a real on-disk path, not a virtual $bunfs one.
  */
 function installHelperFilesStandalone(): { dir: string; execPath: string; token: string; port: number } {
     const dir = helperInstallDir();
     fs.mkdirSync(dir, { recursive: true });
     const execPath = path.join(dir, process.platform === "win32" ? "nivris-update-helper.exe" : "nivris-update-helper");
-    fs.writeFileSync(execPath, fs.readFileSync(helperBinaryPath));
+    fs.copyFileSync(process.execPath, execPath);
     if (process.platform !== "win32") fs.chmodSync(execPath, 0o755);
 
     const token = crypto.randomBytes(16).toString("hex");
@@ -230,13 +232,21 @@ async function main(): Promise<void> {
     fs.writeFileSync(configPath, JSON.stringify(config, null, 4));
     log(`Đã cập nhật config: ${configPath}`);
 
-    registerHelperService({ execPath: helperExecPath, args: [], helperDir, log });
+    registerHelperService({ execPath: helperExecPath, args: [RUN_HELPER_FLAG], helperDir, log });
 
     log("XONG. Mở Element lên để thấy N.I.V.R.I.S.");
     log("Từ giờ, khi có bản mới hoặc Element tự cập nhật ghi đè lại patch, banner trong app sẽ tự cập nhật — không cần chạy lại file này nữa.");
     finish(TITLE, true, "Đã cài đặt N.I.V.R.I.S. thành công!\n\nMở Element lên để bắt đầu dùng.");
 }
 
-main().catch((e) => {
-    fail(e instanceof Error ? e.message : String(e));
-});
+if (process.argv.includes(RUN_HELPER_FLAG)) {
+    // Re-invoked as the persistent background helper (see installHelperFilesStandalone() +
+    // registerHelperService() above) — run the helper server logic instead of the installer logic.
+    // A dynamic import rather than a static one so the installer's normal run never pulls in (or
+    // starts) the helper's own top-level side effects (it opens an HTTP server on import).
+    await import("./nivris-update-helper.mjs");
+} else {
+    main().catch((e) => {
+        fail(e instanceof Error ? e.message : String(e));
+    });
+}

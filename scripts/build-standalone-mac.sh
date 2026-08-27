@@ -28,20 +28,6 @@ NIVRIS_UPDATE_TOKEN=__NIVRIS_TOKEN_PLACEHOLDER__ \
 NIVRIS_UPDATE_PORT=47291 \
 npm run build >/dev/null
 
-echo "==> compiling update helper (arm64)"
-bun build --compile scripts/nivris-update-helper.mjs --outfile "$WORK/helper-arm64" >/dev/null
-echo "==> compiling update helper (x64, cross-compiled)"
-bun build --compile --target=bun-darwin-x64-baseline scripts/nivris-update-helper.mjs --outfile "$WORK/helper-x64" >/dev/null
-echo "==> lipo universal update helper binary"
-lipo -create "$WORK/helper-arm64" "$WORK/helper-x64" -output "$WORK/helper-universal"
-chmod +x "$WORK/helper-universal"
-codesign -s - --force "$WORK/helper-universal"
-mkdir -p dist
-# Literal ".exe" name even on macOS — standalone-installer.ts's embed import path is identical
-# across both platforms' separate compile jobs (see its doc comment); harmless on macOS, which
-# doesn't care about file extensions for executability.
-cp "$WORK/helper-universal" dist/nivris-update-helper-bin.exe
-
 NIVRIS_BUILD_SHA_VALUE=$(git rev-parse HEAD)
 
 for MODE in install uninstall; do
