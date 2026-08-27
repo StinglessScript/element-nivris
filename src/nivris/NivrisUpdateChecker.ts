@@ -58,7 +58,14 @@ async function fetchHelperStatus(): Promise<HelperStatus | null> {
 
 async function fetchLatestSha(): Promise<string | null> {
     try {
-        const res = await fetch(`https://github.com/${REPO}/releases/latest/download/nivris-version.json`);
+        // NOT the same URL the helper downloads from (github.com/.../releases/latest/download/...)
+        // — that redirects to Azure Blob Storage, whose response has no
+        // Access-Control-Allow-Origin header, so a browser fetch() from this renderer context
+        // silently fails (caught below, indistinguishable from "offline"). api.github.com sets
+        // "access-control-allow-origin: *" on its public GET endpoints, so use that instead just
+        // for the version check; the helper's actual download (plain Node https, not subject to
+        // CORS) is unaffected and keeps using the release asset.
+        const res = await fetch(`https://api.github.com/repos/${REPO}/commits/main`);
         if (!res.ok) return null;
         const data = (await res.json()) as { sha?: unknown };
         return typeof data.sha === "string" ? data.sha : null;
