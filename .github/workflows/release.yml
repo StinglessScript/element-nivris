@@ -10,6 +10,42 @@ on:
   workflow_dispatch:
 
 jobs:
+  build-module:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - run: corepack enable
+      - run: npm install
+
+      # Public shared build downloaded by every user's nivris-update-helper (see
+      # scripts/nivris-update-helper.mjs's "fast path") — can't embed any one user's real update
+      # token, so it gets the placeholder text-substituted for the real one at apply-time (see
+      # TOKEN_PLACEHOLDER in scripts/lib/apply-update.mjs). Port is not machine-specific.
+      - name: Build module
+        run: npm run build
+        env:
+          NIVRIS_UPDATE_TOKEN: __NIVRIS_TOKEN_PLACEHOLDER__
+          NIVRIS_UPDATE_PORT: "47291"
+
+      - run: mkdir -p dist-module
+      - run: cp lib/index.js dist-module/nivris-module.js
+      - run: cp lib/index.js.map dist-module/nivris-module.js.map
+      - run: echo "{\"sha\":\"${{ github.sha }}\"}" > dist-module/nivris-version.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nivris-module
+          path: |
+            dist-module/nivris-module.js
+            dist-module/nivris-module.js.map
+            dist-module/nivris-version.json
+          retention-days: 30
+
   build-macos:
     runs-on: macos-latest
     steps:
@@ -87,7 +123,7 @@ jobs:
           retention-days: 30
 
   publish:
-    needs: [build-macos, build-windows]
+    needs: [build-module, build-macos, build-windows]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -96,6 +132,11 @@ jobs:
         with:
           pattern: nivris-*-installers
           merge-multiple: true
+          path: dist
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: nivris-module
           path: dist
 
       - uses: softprops/action-gh-release@v2
@@ -108,3 +149,6 @@ jobs:
             dist/NivrisUninstaller-macOS.zip
             dist/NivrisInstaller-Windows.exe
             dist/NivrisUninstaller-Windows.exe
+            dist/nivris-module.js
+            dist/nivris-module.js.map
+            dist/nivris-version.json

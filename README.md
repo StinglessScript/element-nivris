@@ -105,11 +105,19 @@ To remove it:
 npx -y -p github:StinglessScript/element-nivris nivris-uninstall
 ```
 
-The installed module knows which commit it was built from, and checks GitHub for a newer one on
-`main`. When there's a new version, or Element's own auto-updater has overwritten the patched
-files, a banner shows up in-app with the exact `nivris-install` command to re-run (and a
-one-click copy button) — the module has no filesystem access of its own, so it can only tell you,
-not do it for you.
+Install registers a small background update helper (`scripts/nivris-update-helper.mjs`, started at
+login via a LaunchAgent/Scheduled Task/systemd unit) that the in-app banner talks to over
+`127.0.0.1` — from then on, both a new Nivris release **and** Element's own auto-updater
+overwriting the patched files are handled automatically: the banner shows "Cập nhật"/"Cài lại" and
+reapplies the patch with one click, no terminal needed. Existing installs from before this shipped
+need to run the install command **once more** to get the helper registered; every update after
+that is automatic.
+
+**macOS only**: the install command ends with a check for one *additional*, separate one-time
+grant the background helper needs (Terminal already having "App Management" access doesn't cover
+it — that permission is per-process, and the helper is a different process). If the install log
+prints instructions for this, do it once; everything works normally either way, it's only the
+in-app auto-update button that needs it.
 
 ## Develop
 

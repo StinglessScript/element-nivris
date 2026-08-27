@@ -13,6 +13,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { findElementResourcesDirWindows } from "./lib/find-element-windows.mjs";
+import { unregisterHelperService } from "./lib/updater-service.mjs";
 
 function log(msg) {
     console.log(`[nivris-uninstall] ${msg}`);
@@ -131,6 +132,8 @@ function main() {
             log(`Cảnh báo: không đọc được ${configPath}, bỏ qua bước dọn config.`);
         }
     }
+
+    unregisterHelperService({ log });
 
     log("XONG. Tắt hẳn Element rồi mở lại — về trạng thái gốc, không còn Nivris.");
 }
