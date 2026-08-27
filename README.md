@@ -105,8 +105,13 @@ To remove it:
 npx -y -p github:StinglessScript/element-nivris nivris-uninstall
 ```
 
-Element's own auto-updater will overwrite the patched files on update —
-re-run the install command afterwards.
+Install registers a small background update helper (`scripts/nivris-update-helper.mjs`, started at
+login via a LaunchAgent/Scheduled Task/systemd unit) that the in-app banner talks to over
+`127.0.0.1` — from then on, both a new Nivris release **and** Element's own auto-updater
+overwriting the patched files are handled automatically: the banner shows "Cập nhật"/"Cài lại" and
+reapplies the patch with one click, no terminal needed. Existing installs from before this shipped
+need to run the install command **once more** to get the helper registered; every update after
+that is automatic.
 
 ## Develop
 

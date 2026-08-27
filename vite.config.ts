@@ -43,5 +43,10 @@ export default defineConfig({
     define: {
         "process.env.NODE_ENV": "'production'",
         process: { env: { NODE_ENV: "production" } },
+        // Baked in by scripts/install-nivris.mjs at build time — the module has no filesystem access
+        // to read these at runtime otherwise. See src/nivris/NivrisUpdateChecker.ts (uses the token
+        // to authenticate to the local update helper) and scripts/nivris-update-helper.mjs.
+        __NIVRIS_UPDATE_TOKEN__: JSON.stringify(process.env.NIVRIS_UPDATE_TOKEN ?? ""),
+        __NIVRIS_UPDATE_PORT__: JSON.stringify(process.env.NIVRIS_UPDATE_PORT ?? "47291"),
     },
 });

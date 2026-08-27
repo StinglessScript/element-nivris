@@ -10,6 +10,7 @@ import AiIcon from "@vector-im/compound-design-tokens/assets/web/icons/ai";
 
 import type { Module, Api, ModuleFactory } from "@element-hq/element-web-module-api";
 import NivrisWorkspace from "./components/NivrisWorkspace";
+import NivrisUpdateBanner from "./components/NivrisUpdateBanner";
 import { startThreadPanelIconInjector } from "./nivris/threadPanelInjector";
 import style from "./style.css" with { type: "css" };
 
@@ -36,6 +37,10 @@ class NivrisModule implements Module {
         });
 
         startThreadPanelIconInjector(this.api);
+
+        const bannerHost = document.createElement("div");
+        document.body.appendChild(bannerHost);
+        this.api.createRoot(bannerHost).render(<NivrisUpdateBanner />);
     }
 }
 

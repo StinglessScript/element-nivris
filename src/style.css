@@ -1132,3 +1132,37 @@ body[class*="cpd-theme-dark"] {
     .mx_NivrisWorkspace_statRow { display: none; }
     .mx_NivrisWorkspace_inspector { display: none; }
 }
+
+/* ---- Update banner (mounted globally, outside .mx_NivrisWorkspace — see NivrisUpdateBanner.tsx) ---- */
+
+.mx_NivrisUpdateBanner {
+    position: fixed;
+    left: 50%;
+    bottom: 20px;
+    transform: translateX(-50%);
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    border-radius: 8px;
+    background-color: var(--jv-surface);
+    border: 1px solid var(--jv-border-strong);
+    box-shadow: 0 6px 20px rgb(0 0 0 / 18%);
+    font-family: var(--jv-sans);
+}
+.mx_NivrisUpdateBanner_text { font: 400 12px var(--jv-sans); color: var(--jv-ink); }
+.mx_NivrisUpdateBanner_text_error { color: var(--jv-danger); }
+.mx_NivrisUpdateBanner_btn {
+    flex-shrink: 0;
+    height: 26px;
+    padding: 0 12px;
+    border: none;
+    border-radius: 4px;
+    background-color: var(--jv-teal-solid);
+    color: #fff;
+    font: 500 10.5px var(--jv-mono);
+    letter-spacing: 0.04em;
+    cursor: pointer;
+}
+.mx_NivrisUpdateBanner_btn:hover { background-color: #086361; }

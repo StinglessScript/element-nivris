@@ -15,19 +15,22 @@ Please see LICENSE files in the repository root for full details.
 //      asar-integrity fuse entirely; we never touch app.asar or re-sign anything).
 //   3. Copying the built module to webapp/modules/nivris.js.
 //   4. Adding "/modules/nivris.js" to the user's local config.json "modules" array.
+//   5. Installing + starting a small background update-helper service (see
+//      scripts/nivris-update-helper.mjs) so future updates can be applied from the in-app banner
+//      instead of re-running this command by hand.
 //
 // Usage:  node scripts/install-nivris.mjs
 // Override the target app (e.g. a test copy) with:  ELEMENT_APP_PATH=/path/to/Element.app node scripts/install-nivris.mjs
 
 import fs from "node:fs";
 import path from "node:path";
-import os from "node:os";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { findElementResourcesDirWindows } from "./lib/find-element-windows.mjs";
+import { applyNivrisUpdate } from "./lib/apply-update.mjs";
+import { installHelperFiles, registerHelperService } from "./lib/updater-service.mjs";
 
 const moduleDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const isWin = process.platform === "win32";
+const NIVRIS_REPO = "StinglessScript/element-nivris";
 
 function log(msg) {
     console.log(`[nivris-install] ${msg}`);
@@ -37,197 +40,64 @@ function fail(msg) {
     process.exit(1);
 }
 
-function resourcesDirFromAppPath(appPath) {
-    return process.platform === "darwin" ? path.join(appPath, "Contents/Resources") : path.join(appPath, "resources");
-}
-
-function findElementApp() {
-    if (process.env.ELEMENT_APP_PATH) {
-        const p = process.env.ELEMENT_APP_PATH;
-        if (!fs.existsSync(p)) fail(`ELEMENT_APP_PATH không tồn tại: ${p}`);
-        return resourcesDirFromAppPath(p);
-    }
-
-    if (process.platform === "darwin") {
-        const candidates = ["/Applications/Element.app", path.join(os.homedir(), "Applications/Element.app")];
-        const found = candidates.find((p) => fs.existsSync(p));
-        if (!found) {
-            fail(
-                "Không tìm thấy Element.app trong /Applications.\n" +
-                    "Cài Element Desktop trước, hoặc chạy lại với ELEMENT_APP_PATH=/duong/dan/Element.app",
-            );
+/**
+ * Identifies exactly which commit is being installed, for src/nivris/NivrisUpdateChecker.ts to
+ * compare against later. The common install path (`npx -y -p github:.../ nivris-install`) does
+ * NOT leave a `.git` checkout behind — npm materializes only the tracked files — so `git rev-parse
+ * HEAD` fails there; instead read the commit npm itself resolved, recorded in the npx run's own
+ * `node_modules/.package-lock.json` next to this package (keyed by this package's own directory
+ * name, not guessed — this repo also has one git dependency of its own, matrix-js-sdk, so picking
+ * the wrong lockfile entry would silently pin the wrong package's commit). Falls back to `git
+ * rev-parse HEAD` for a real local checkout (`npm run install:live`), which has no such lockfile
+ * entry for itself.
+ */
+function currentGitSha() {
+    try {
+        const lockPath = path.join(moduleDir, "..", ".package-lock.json");
+        if (fs.existsSync(lockPath)) {
+            const lock = JSON.parse(fs.readFileSync(lockPath, "utf-8"));
+            const resolved = lock.packages?.[`node_modules/${path.basename(moduleDir)}`]?.resolved ?? "";
+            const m = /#([0-9a-f]{40})$/.exec(resolved);
+            if (m) return m[1];
         }
-        return resourcesDirFromAppPath(found);
+    } catch {
+        // fall through to git
     }
-
-    if (process.platform === "win32") {
-        const found = findElementResourcesDirWindows();
-        if (!found) {
-            fail(
-                "Không tìm thấy Element Desktop (đã thử %LOCALAPPDATA%\\Element, %LOCALAPPDATA%\\Programs\\Element,\n" +
-                    "Program Files, và Windows registry).\n" +
-                    "Cài Element Desktop (bản .exe thường từ element.io, không phải Microsoft Store) trước,\n" +
-                    "hoặc chạy lại với ELEMENT_APP_PATH=C:\\duong\\dan\\app-x.y.z nếu bạn biết đường dẫn thật.",
-            );
-        }
-        return found;
-    }
-
-    if (process.platform === "linux") {
-        // Only .deb/apt installs (electron-builder's default "/opt/<ProductName>" layout) are
-        // supported. AppImage mounts a read-only, disposable squashfs image at runtime — there is
-        // nowhere persistent to write a patch. Snap sandboxes block writes outside its own data
-        // dirs the same way. Both need a different distribution mechanism than this script.
-        const candidates = ["/opt/Element", "/opt/element-desktop", "/usr/lib/element-desktop"];
-        const found = candidates.find((p) => fs.existsSync(p));
-        if (!found) {
-            fail(
-                "Không tìm thấy bản cài Element ở /opt/Element (bản .deb/apt).\n" +
-                    "Nếu bạn dùng AppImage hoặc Snap: cách này KHÔNG áp dụng được — AppImage là ảnh nén chỉ đọc,\n" +
-                    "mount lại từ đầu mỗi lần chạy nên không có chỗ nào để lưu patch lâu dài; Snap thì sandbox chặn\n" +
-                    "ghi ra ngoài thư mục dữ liệu riêng của nó. Cài bản .deb (apt) thay thế, hoặc chạy lại với\n" +
-                    "ELEMENT_APP_PATH=/duong/dan/thu/muc/element (thư mục chứa 'resources/').",
-            );
-        }
-        return resourcesDirFromAppPath(found);
-    }
-
-    fail(`Chưa hỗ trợ nền tảng: ${process.platform} (chỉ macOS, Windows, Linux .deb/apt).`);
-}
-
-/** Under `sudo`, os.homedir()/$XDG_CONFIG_HOME resolve to root's, not the invoking user's. */
-function realHomeDir() {
-    if (process.env.SUDO_UID) {
-        try {
-            return os.userInfo({ uid: Number(process.env.SUDO_UID) }).homedir;
-        } catch {
-            // fall through
-        }
-    }
-    return os.homedir();
-}
-
-function userConfigPath() {
-    if (process.platform === "darwin") return path.join(realHomeDir(), "Library/Application Support/Element/config.json");
-    if (process.platform === "win32") return path.join(process.env.APPDATA ?? "", "Element/config.json");
-    if (process.platform === "linux") {
-        const configHome = process.env.SUDO_UID ? null : process.env.XDG_CONFIG_HOME;
-        return path.join(configHome || path.join(realHomeDir(), ".config"), "Element/config.json");
-    }
-    fail(`Chưa hỗ trợ nền tảng: ${process.platform}`);
-}
-
-function buildModule() {
-    log("Building module (vite build)...");
-    const res = spawnSync(isWin ? "npx.cmd" : "npx", ["vite", "build"], { cwd: moduleDir, stdio: "inherit" });
-    if (res.status !== 0) fail("Build thất bại — xem log phía trên.");
-}
-
-function guardPermissionError(e, resourcesDir) {
-    if (e && (e.code === "EPERM" || e.code === "EACCES")) {
-        if (process.platform === "darwin") {
-            fail(
-                `Không có quyền ghi vào ${resourcesDir}.\n` +
-                    "macOS chặn ghi vào bên trong .app trong /Applications trừ khi Terminal (hoặc app đang chạy lệnh này)\n" +
-                    "được cấp quyền 'App Management':\n" +
-                    "  System Settings → Privacy & Security → App Management → bật cho Terminal/app của bạn,\n" +
-                    "  rồi khởi động lại Terminal và chạy lại lệnh này.",
-            );
-        }
-        if (process.platform === "linux") {
-            fail(`Không có quyền ghi vào ${resourcesDir}. Chạy lại với sudo (ví dụ: sudo npx -p github:StinglessScript/element-nivris nivris-install).`);
-        }
-        fail(`Không có quyền ghi vào ${resourcesDir}. Thử chạy lại với quyền Administrator.`);
-    }
-    if (e && e.code === "EBUSY") {
-        fail(
-            "Element đang chạy nên file đang bị khoá, không sửa được.\n" +
-                (process.platform === "win32"
-                    ? "Element hay ẩn xuống khay hệ thống (system tray, cạnh đồng hồ) thay vì thoát hẳn khi đóng cửa sổ.\n" +
-                      "Chuột phải vào icon Element trong khay hệ thống → Quit/Exit (hoặc mở Task Manager, End Task mọi\n" +
-                      "tiến trình 'Element'), rồi chạy lại lệnh này."
-                    : "Tắt hẳn Element (Cmd+Q, không chỉ đóng cửa sổ) rồi chạy lại lệnh này."),
-        );
-    }
-    throw e;
+    const res = spawnSync("git", ["rev-parse", "HEAD"], { cwd: moduleDir, encoding: "utf-8" });
+    return res.status === 0 ? res.stdout.trim() : "unknown";
 }
 
 async function main() {
-    const resourcesDir = findElementApp();
-    log(`Element resources: ${resourcesDir}`);
+    const sha = currentGitSha();
+    log(`Phiên bản (git SHA): ${sha}`);
 
-    const webappAsar = path.join(resourcesDir, "webapp.asar");
-    const webappBackup = path.join(resourcesDir, "webapp.asar.nivris-backup");
-    const webappDir = path.join(resourcesDir, "webapp");
+    // Installed/rotated before the build so the token can be baked into the bundle the build step
+    // produces — the module has no filesystem access at runtime, so this is the only way it can
+    // ever learn the shared secret the update helper expects.
+    const { dir: helperDir, token, port } = installHelperFiles({
+        scriptsDir: path.dirname(fileURLToPath(import.meta.url)),
+        repo: NIVRIS_REPO,
+        log,
+    });
 
-    buildModule();
-
-    const builtJs = path.join(moduleDir, "lib/index.js");
-    if (!fs.existsSync(builtJs)) fail("Không tìm thấy lib/index.js sau khi build.");
-
+    let webappDir;
     try {
-        if (fs.existsSync(webappDir)) {
-            log("webapp/ đã tồn tại (đã cài trước đó) — chỉ cập nhật module.");
-            if (fs.existsSync(webappAsar)) {
-                // Leftover from a previous run that got interrupted after extracting but before
-                // renaming (e.g. Element was still running and locked the file) — Element prefers
-                // webapp.asar over webapp/ when both exist, so this silently makes it load the
-                // ORIGINAL unpatched asar instead of ours. Clean it up so the patch actually takes.
-                log("webapp.asar cũ vẫn còn (có thể do lần cài trước bị gián đoạn) — dọn để Element không đọc nhầm bản gốc.");
-                if (fs.existsSync(webappBackup)) {
-                    fs.rmSync(webappAsar);
-                } else {
-                    fs.renameSync(webappAsar, webappBackup);
-                }
-            }
-        } else if (fs.existsSync(webappAsar)) {
-            log("Giải nén webapp.asar...");
-            const { extractAll } = await import("@electron/asar");
-            extractAll(webappAsar, webappDir);
-            fs.renameSync(webappAsar, webappBackup);
-            log(`Đã sao lưu webapp.asar gốc -> ${webappBackup}`);
-        } else {
-            fail(`Không tìm thấy webapp.asar tại ${resourcesDir} (đã cài rồi, hoặc bản Element này không dùng asar?).`);
-        }
-
-        const modulesDir = path.join(webappDir, "modules");
-        fs.mkdirSync(modulesDir, { recursive: true });
-        fs.copyFileSync(builtJs, path.join(modulesDir, "nivris.js"));
-        const map = `${builtJs}.map`;
-        if (fs.existsSync(map)) fs.copyFileSync(map, path.join(modulesDir, "nivris.js.map"));
-        log("Đã copy nivris.js vào webapp/modules/");
+        ({ webappDir } = await applyNivrisUpdate({
+            moduleDir,
+            env: { NIVRIS_UPDATE_TOKEN: token, NIVRIS_UPDATE_PORT: String(port) },
+            onStatus: log,
+        }));
     } catch (e) {
-        guardPermissionError(e, resourcesDir);
+        fail(e instanceof Error ? e.message : String(e));
+        return;
     }
 
-    const configPath = userConfigPath();
-    fs.mkdirSync(path.dirname(configPath), { recursive: true });
-    let config = {};
-    if (fs.existsSync(configPath)) {
-        try {
-            config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-        } catch {
-            log(`Cảnh báo: ${configPath} không parse được — sẽ ghi đè bằng config mới.`);
-        }
-    }
-    const modules = new Set(config.modules ?? []);
-    modules.add("/modules/nivris.js");
-    config.modules = Array.from(modules);
-    fs.writeFileSync(configPath, JSON.stringify(config, null, 4));
-    log(`Đã cập nhật config: ${configPath}`);
+    fs.writeFileSync(path.join(webappDir, "modules", "nivris.version.json"), JSON.stringify({ sha }));
 
-    // Running under `sudo` on Linux (needed to write /opt) would otherwise leave config.json
-    // owned by root, unreadable/unwritable by the actual user's later Element runs.
-    if (process.platform === "linux" && process.env.SUDO_UID) {
-        try {
-            fs.chownSync(configPath, Number(process.env.SUDO_UID), Number(process.env.SUDO_GID ?? process.env.SUDO_UID));
-        } catch (e) {
-            log(`Cảnh báo: không đổi được chủ sở hữu ${configPath} về user thường (${e.message}).`);
-        }
-    }
+    registerHelperService({ nodeExec: process.execPath, helperDir, log });
 
     log("XONG. Tắt hẳn Element (không chỉ đóng cửa sổ) rồi mở lại để thấy N.I.V.R.I.S.");
-    log("Lưu ý: Element tự cập nhật sẽ ghi đè lại webapp.asar gốc — sau mỗi lần Element tự update, chạy lại lệnh này.");
+    log("Từ giờ, khi có bản mới hoặc Element tự cập nhật ghi đè lại patch, banner trong app sẽ tự cập nhật — không cần chạy lại lệnh này nữa.");
 }
 
 main().catch((e) => {

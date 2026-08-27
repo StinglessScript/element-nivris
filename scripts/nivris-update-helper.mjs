@@ -1,0 +1,203 @@
+#!/usr/bin/env node
+/*
+Copyright 2026 New Vector Ltd.
+
+SPDX-License-Identifier: AGPL-3.0-only OR GPL-3.0-only OR LicenseRef-Element-Commercial
+Please see LICENSE files in the repository root for full details.
+*/
+
+// Persistent background service, registered as a LaunchAgent (macOS) / Scheduled Task (Windows) /
+// systemd --user unit (Linux) by install-nivris.mjs, so the in-app update banner
+// (src/nivris/NivrisUpdateChecker.ts) can apply updates without ever opening a terminal. Listens
+// on 127.0.0.1 only, gated by a token baked into both this helper's own config and the built
+// module bundle at install time (neither side ever transmits it — see install-nivris.mjs).
+//
+// Two update paths:
+//  - Common case: webapp/ already exists (previously patched) -> download the prebuilt nivris.js
+//    from the latest GitHub Release and swap it in directly. Fast, no npm/vite/asar needed.
+//  - Rare case: webapp/ is missing (Element reinstalled itself fresh, wiping the whole patch back
+//    to a stock webapp.asar) -> shell out to `npx -y -p github:<repo> nivris-install`, the same
+//    fully-dependency-resolved path the very first manual install uses. This standalone helper
+//    directory doesn't carry its own copy of @electron/asar (only needed for that one-time
+//    extraction), so it defers to npx rather than trying to bundle that dependency itself.
+
+import fs from "node:fs";
+import path from "node:path";
+import os from "node:os";
+import http from "node:http";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { applyNivrisUpdate, downloadFile, quitElementIfRunning, relaunchElement, findElementApp } from "./lib/apply-update.mjs";
+
+const helperDir = path.dirname(fileURLToPath(import.meta.url));
+const configPath = path.join(helperDir, "helper-config.json");
+
+function log(msg) {
+    console.log(`[nivris-update-helper] ${new Date().toISOString()} ${msg}`);
+}
+
+function loadConfig() {
+    if (!fs.existsSync(configPath)) {
+        console.error(`[nivris-update-helper] Missing config file: ${configPath}`);
+        process.exit(1);
+    }
+    return JSON.parse(fs.readFileSync(configPath, "utf-8"));
+}
+
+// { port: number, token: string, repo: "owner/name" }
+const config = loadConfig();
+
+let progress = { percent: 0, label: "", done: true, ok: true, message: "" };
+let updating = false;
+
+function setProgress(patch) {
+    progress = { ...progress, ...patch };
+}
+
+function currentSha(webappDir) {
+    try {
+        const versionFile = path.join(webappDir, "modules", "nivris.version.json");
+        if (fs.existsSync(versionFile)) return JSON.parse(fs.readFileSync(versionFile, "utf-8")).sha ?? null;
+    } catch {
+        // ignore — treated the same as "unknown"
+    }
+    return null;
+}
+
+function readStatus() {
+    try {
+        const resourcesDir = findElementApp({
+            fail: (msg) => {
+                throw new Error(msg);
+            },
+        });
+        const webappDir = path.join(resourcesDir, "webapp");
+        const nivrisJs = path.join(webappDir, "modules", "nivris.js");
+        return { patched: fs.existsSync(nivrisJs), sha: currentSha(webappDir) };
+    } catch {
+        return { patched: false, sha: null };
+    }
+}
+
+async function runFullReinstall() {
+    setProgress({ percent: 10, label: "Element vừa tự cập nhật — đang cài lại N.I.V.R.I.S...", done: false, ok: true, message: "" });
+    await quitElementIfRunning((msg) => setProgress({ label: msg }));
+
+    setProgress({ label: "Đang tải và cài lại (npx)..." });
+    const isWin = process.platform === "win32";
+    const res = spawnSync(isWin ? "npx.cmd" : "npx", ["-y", "-p", `github:${config.repo}`, "nivris-install"], { stdio: "ignore" });
+    if (res.status !== 0) {
+        setProgress({ percent: 100, done: true, ok: false, message: "Cài lại thất bại — cần chạy tay lệnh nivris-install một lần nữa." });
+        return;
+    }
+
+    setProgress({ percent: 90, label: "Đang khởi động lại Element..." });
+    relaunchElement();
+    setProgress({ percent: 100, done: true, ok: true, message: "Xong!" });
+}
+
+async function runFastUpdate() {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "nivris-update-"));
+    try {
+        setProgress({ percent: 5, label: "Đang kiểm tra bản mới nhất...", done: false, ok: true, message: "" });
+        const versionPath = path.join(tmpDir, "nivris-version.json");
+        await downloadFile(`https://github.com/${config.repo}/releases/latest/download/nivris-version.json`, versionPath);
+        const { sha } = JSON.parse(fs.readFileSync(versionPath, "utf-8"));
+
+        setProgress({ percent: 20, label: "Đang tải bản cập nhật..." });
+        const jsPath = path.join(tmpDir, "nivris-module.js");
+        await downloadFile(`https://github.com/${config.repo}/releases/latest/download/nivris-module.js`, jsPath);
+
+        setProgress({ percent: 50, label: "Đang tắt Element..." });
+        await quitElementIfRunning((msg) => setProgress({ label: msg }));
+
+        setProgress({ percent: 65, label: "Đang cài bản mới..." });
+        const { webappDir } = await applyNivrisUpdate({
+            builtJsPath: jsPath,
+            realToken: config.token,
+            onStatus: (msg) => setProgress({ label: msg }),
+        });
+        fs.writeFileSync(path.join(webappDir, "modules", "nivris.version.json"), JSON.stringify({ sha }));
+
+        setProgress({ percent: 90, label: "Đang khởi động lại Element..." });
+        relaunchElement();
+        setProgress({ percent: 100, done: true, ok: true, message: "Xong!" });
+    } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+}
+
+async function handleUpdate() {
+    if (updating) return;
+    updating = true;
+    try {
+        const { patched } = readStatus();
+        if (patched) {
+            await runFastUpdate();
+        } else {
+            await runFullReinstall();
+        }
+    } catch (e) {
+        setProgress({ percent: 100, done: true, ok: false, message: e instanceof Error ? e.message : String(e) });
+    } finally {
+        updating = false;
+    }
+}
+
+function authorized(req) {
+    const token = req.headers["x-nivris-token"];
+    return typeof token === "string" && token === config.token;
+}
+
+const server = http.createServer((req, res) => {
+    res.setHeader("Access-Control-Allow-Origin", req.headers.origin ?? "*");
+    res.setHeader("Access-Control-Allow-Headers", "X-Nivris-Token, Content-Type");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+
+    // Preflight has no custom headers of its own to check — must succeed unconditionally so the
+    // browser retries the real request, which IS gated by the token below.
+    if (req.method === "OPTIONS") {
+        res.writeHead(204).end();
+        return;
+    }
+
+    if (!authorized(req)) {
+        res.writeHead(401, { "content-type": "application/json" }).end(JSON.stringify({ error: "unauthorized" }));
+        return;
+    }
+
+    if (req.method === "GET" && req.url === "/status") {
+        const { patched, sha } = readStatus();
+        res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ helperRunning: true, patched, currentSha: sha }));
+        return;
+    }
+
+    if (req.method === "POST" && req.url === "/update") {
+        void handleUpdate();
+        res.writeHead(202, { "content-type": "application/json" }).end(JSON.stringify({ status: "started" }));
+        return;
+    }
+
+    if (req.method === "GET" && req.url === "/update/progress") {
+        res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(progress));
+        return;
+    }
+
+    res.writeHead(404).end();
+});
+
+server.on("error", (e) => {
+    if (e.code === "EADDRINUSE") {
+        // Another helper instance is already listening — nothing to do, exit cleanly (not a crash,
+        // so a KeepAlive-on-crash-only LaunchAgent won't loop-restart over this).
+        log(`Cổng ${config.port} đã có helper khác đang chạy — thoát êm.`);
+        process.exit(0);
+    }
+    log(`Lỗi server: ${e.message}`);
+    process.exit(1);
+});
+
+server.listen(config.port, "127.0.0.1", () => {
+    fs.writeFileSync(path.join(helperDir, "helper.pid"), String(process.pid));
+    log(`Đang lắng nghe tại http://127.0.0.1:${config.port}`);
+});
