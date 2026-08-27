@@ -189,7 +189,9 @@ function permissionErrorMessage(resourcesDir, errorContext) {
                 "từng tiến trình, được cấp cho Terminal không có nghĩa là helper chạy nền cũng có.\n" +
                 `Mở System Settings → Privacy & Security → App Management → bấm "+" → chọn file:\n` +
                 `  ${process.execPath}\n` +
-                "rồi bật nó lên. Sau đó thử bấm Cập nhật lại trong app."
+                "rồi bật nó lên. Sau đó thử bấm Cập nhật lại trong app.\n" +
+                "(Trên vài bản macOS mới, mục này có thể nằm dưới tên khác trong Privacy & Security" +
+                " — thử tìm mục nào cho phép 1 app sửa app khác nếu không thấy đúng tên 'App Management'.)"
             );
         }
         return (
