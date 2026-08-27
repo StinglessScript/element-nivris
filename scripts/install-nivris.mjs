@@ -7,7 +7,9 @@ Please see LICENSE files in the repository root for full details.
 */
 
 // Installs the Nivris module into an already-installed Element Desktop app (no rebuild of
-// Element itself, no re-signing). Works by:
+// Element itself, no re-signing). Windows and Linux users hitting an install/update issue: please
+// report the exact error output, it helps pin down platform-specific bugs faster than guessing.
+// Works by:
 //   1. Building modules/nivris to lib/index.js.
 //   2. Unpacking the app's webapp.asar into a plain webapp/ directory next to it (Element's own
 //      resource loader — see element-desktop's src/electron-main.ts tryPaths() — falls back to a
