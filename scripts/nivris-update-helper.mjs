@@ -27,7 +27,14 @@ import os from "node:os";
 import http from "node:http";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { applyNivrisUpdate, downloadFile, quitElementIfRunning, relaunchElement, findElementApp } from "./lib/apply-update.mjs";
+import {
+    applyNivrisUpdate,
+    downloadFile,
+    quitElementIfRunning,
+    relaunchElement,
+    findElementApp,
+    checkWritePermission,
+} from "./lib/apply-update.mjs";
 
 const helperDir = path.dirname(fileURLToPath(import.meta.url));
 const configPath = path.join(helperDir, "helper-config.json");
@@ -81,6 +88,16 @@ function readStatus() {
 
 async function runFullReinstall() {
     setProgress({ percent: 10, label: "Element vừa tự cập nhật — đang cài lại N.I.V.R.I.S...", done: false, ok: true, message: "" });
+
+    // Fail fast on a permission problem, before ever touching Element — a doomed update has no
+    // business closing an app the user is actively using.
+    const resourcesDir = findElementApp({
+        fail: (msg) => {
+            throw new Error(msg);
+        },
+    });
+    checkWritePermission(resourcesDir, "helper");
+
     await quitElementIfRunning((msg) => setProgress({ label: msg }));
 
     setProgress({ label: "Đang tải và cài lại (npx)..." });
@@ -105,6 +122,16 @@ async function runFastUpdate() {
     let quit = false;
     try {
         setProgress({ percent: 5, label: "Đang kiểm tra bản mới nhất...", done: false, ok: true, message: "" });
+
+        // Fail fast on a permission problem — before downloading anything, and well before
+        // quitElementIfRunning() below, so a doomed update never has to close the app at all.
+        const resourcesDir = findElementApp({
+            fail: (msg) => {
+                throw new Error(msg);
+            },
+        });
+        checkWritePermission(resourcesDir, "helper");
+
         const versionPath = path.join(tmpDir, "nivris-version.json");
         await downloadFile(`https://github.com/${config.repo}/releases/latest/download/nivris-version.json`, versionPath);
         const { sha } = JSON.parse(fs.readFileSync(versionPath, "utf-8"));

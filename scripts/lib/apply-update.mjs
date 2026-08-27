@@ -169,37 +169,46 @@ function promptMacAppManagementGrant(execPath) {
     }
 }
 
-export function guardPermissionError(e, resourcesDir, { fail, errorContext = "cli" }) {
-    if (e && (e.code === "EPERM" || e.code === "EACCES")) {
-        if (process.platform === "darwin") {
-            if (errorContext === "helper") {
-                // macOS's "App Management" TCC grant is per requesting-process — Terminal already
-                // has it (that's how the initial `nivris-install` run worked), but the background
-                // helper is a *different* process (node, run via LaunchAgent, no Terminal involved)
-                // that's never been granted it, so it needs its own separate grant. One-time only:
-                // once granted, this exact node binary keeps working for every future update.
-                promptMacAppManagementGrant(process.execPath);
-                fail(
-                    `Không có quyền ghi vào ${resourcesDir}.\n` +
-                        "Tiến trình cập nhật nền (node) chưa được cấp quyền 'App Management' — quyền này tính riêng theo\n" +
-                        "từng tiến trình, được cấp cho Terminal không có nghĩa là helper chạy nền cũng có.\n" +
-                        `Mở System Settings → Privacy & Security → App Management → bấm "+" → chọn file:\n` +
-                        `  ${process.execPath}\n` +
-                        "rồi bật nó lên. Sau đó thử bấm Cập nhật lại trong app.",
-                );
-            }
-            fail(
+/** Builds the "no write permission" message for `resourcesDir`, with macOS's helper-vs-CLI
+ * distinction (see promptMacAppManagementGrant's doc comment). Also fires the best-effort native
+ * dialog as a side effect when `errorContext === "helper"` on macOS. Shared by the exception-driven
+ * path (guardPermissionError, an actual write already failed) and the preflight path
+ * (checkWritePermission, called before quitting Element at all so a doomed update never has to). */
+function permissionErrorMessage(resourcesDir, errorContext) {
+    if (process.platform === "darwin") {
+        if (errorContext === "helper") {
+            // macOS's "App Management" TCC grant is per requesting-process — Terminal already has
+            // it (that's how the initial `nivris-install` run worked), but the background helper is
+            // a *different* process (node, run via LaunchAgent, no Terminal involved) that's never
+            // been granted it, so it needs its own separate grant. One-time only: once granted, this
+            // exact node binary keeps working for every future update.
+            promptMacAppManagementGrant(process.execPath);
+            return (
                 `Không có quyền ghi vào ${resourcesDir}.\n` +
-                    "macOS chặn ghi vào bên trong .app trong /Applications trừ khi Terminal (hoặc app đang chạy lệnh này)\n" +
-                    "được cấp quyền 'App Management':\n" +
-                    "  System Settings → Privacy & Security → App Management → bật cho Terminal/app của bạn,\n" +
-                    "  rồi khởi động lại Terminal và chạy lại lệnh này.",
+                "Tiến trình cập nhật nền (node) chưa được cấp quyền 'App Management' — quyền này tính riêng theo\n" +
+                "từng tiến trình, được cấp cho Terminal không có nghĩa là helper chạy nền cũng có.\n" +
+                `Mở System Settings → Privacy & Security → App Management → bấm "+" → chọn file:\n` +
+                `  ${process.execPath}\n` +
+                "rồi bật nó lên. Sau đó thử bấm Cập nhật lại trong app."
             );
         }
-        if (process.platform === "linux") {
-            fail(`Không có quyền ghi vào ${resourcesDir}. Chạy lại với sudo (ví dụ: sudo npx -p github:StinglessScript/element-nivris nivris-install).`);
-        }
-        fail(`Không có quyền ghi vào ${resourcesDir}. Thử chạy lại với quyền Administrator.`);
+        return (
+            `Không có quyền ghi vào ${resourcesDir}.\n` +
+            "macOS chặn ghi vào bên trong .app trong /Applications trừ khi Terminal (hoặc app đang chạy lệnh này)\n" +
+            "được cấp quyền 'App Management':\n" +
+            "  System Settings → Privacy & Security → App Management → bật cho Terminal/app của bạn,\n" +
+            "  rồi khởi động lại Terminal và chạy lại lệnh này."
+        );
+    }
+    if (process.platform === "linux") {
+        return `Không có quyền ghi vào ${resourcesDir}. Chạy lại với sudo (ví dụ: sudo npx -p github:StinglessScript/element-nivris nivris-install).`;
+    }
+    return `Không có quyền ghi vào ${resourcesDir}. Thử chạy lại với quyền Administrator.`;
+}
+
+export function guardPermissionError(e, resourcesDir, { fail, errorContext = "cli" }) {
+    if (e && (e.code === "EPERM" || e.code === "EACCES")) {
+        fail(permissionErrorMessage(resourcesDir, errorContext));
     }
     if (e && e.code === "EBUSY") {
         fail(
@@ -212,6 +221,17 @@ export function guardPermissionError(e, resourcesDir, { fail, errorContext = "cl
         );
     }
     throw e;
+}
+
+/**
+ * Preflight: throws the same styled permission error as guardPermissionError, but *before*
+ * anything has been touched — call this ahead of quitElementIfRunning() so a doomed update never
+ * has to close Element at all. Returns silently if the write test succeeds.
+ */
+export function checkWritePermission(resourcesDir, errorContext) {
+    if (!canWriteToResourcesDir(resourcesDir)) {
+        throw new Error(permissionErrorMessage(resourcesDir, errorContext));
+    }
 }
 
 /**
@@ -231,6 +251,25 @@ export function guardPermissionError(e, resourcesDir, { fail, errorContext = "cl
  * the built JS before it's copied in — needed when `builtJsPath` points at the shared public CI
  * build (see TOKEN_PLACEHOLDER's doc comment above).
  */
+/**
+ * Actually attempts a throwaway write inside `resourcesDir` and immediately removes it — macOS's
+ * "App Management" TCC restriction isn't reflected in POSIX permission bits at all (fs.access()
+ * would report the path as normally writable), so the only reliable way to know whether a write
+ * will succeed is to try one. Used as a preflight so the background helper can fail fast on a
+ * permission problem *before* quitting Element, instead of only discovering it after Element is
+ * already closed for no reason.
+ */
+export function canWriteToResourcesDir(resourcesDir) {
+    const probePath = path.join(resourcesDir, ".nivris-write-test");
+    try {
+        fs.writeFileSync(probePath, "");
+        fs.rmSync(probePath, { force: true });
+        return true;
+    } catch {
+        return false;
+    }
+}
+
 export async function applyNivrisUpdate({ moduleDir, builtJsPath, realToken, env = {}, onStatus, errorContext = "cli" }) {
     const log = (msg) => onStatus?.(msg);
     const fail = (msg) => {
