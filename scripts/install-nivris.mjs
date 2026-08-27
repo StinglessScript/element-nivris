@@ -97,7 +97,39 @@ async function main() {
     registerHelperService({ nodeExec: process.execPath, helperDir, log });
 
     log("XONG. Tắt hẳn Element (không chỉ đóng cửa sổ) rồi mở lại để thấy N.I.V.R.I.S.");
-    log("Từ giờ, khi có bản mới hoặc Element tự cập nhật ghi đè lại patch, banner trong app sẽ tự cập nhật — không cần chạy lại lệnh này nữa.");
+    await checkHelperCanWriteAndWarn({ port, token, log });
+}
+
+/**
+ * On macOS, "App Management" write access is granted per requesting-process, and Terminal (which
+ * just successfully patched Element above) is a *different* process from the persistent background
+ * helper (a plain `node` invocation run via LaunchAgent, no Terminal involved) — so a working
+ * install here doesn't imply the helper can write later. Surfacing that gap now, while the user is
+ * still in this same install session, beats discovering it days later via a silently-failing
+ * background update the user never asked to think about.
+ */
+async function checkHelperCanWriteAndWarn({ port, token, log }) {
+    if (process.platform !== "darwin") return;
+
+    // The LaunchAgent was just (re)loaded — give it a moment to actually start listening.
+    for (let i = 0; i < 10; i++) {
+        await new Promise((r) => setTimeout(r, 300));
+        try {
+            const res = await fetch(`http://127.0.0.1:${port}/can-write`, { headers: { "X-Nivris-Token": token } });
+            if (!res.ok) continue;
+            const { canWrite } = await res.json();
+            if (canWrite === false) {
+                log("");
+                log("QUAN TRỌNG — cần thêm 1 bước, làm 1 LẦN DUY NHẤT để bật cập nhật tự động trong app sau này:");
+                log(`  System Settings → Privacy & Security → App Management → bấm "+" → chọn file: ${process.execPath}`);
+                log(`  rồi bật nó lên. Không làm bước này thì mọi thứ vẫn dùng được bình thường, chỉ là`);
+                log(`  banner "Cập nhật" trong app sẽ không tự chạy được cho tới khi bạn làm bước trên.`);
+            }
+            return;
+        } catch {
+            // helper not listening yet — retry
+        }
+    }
 }
 
 main().catch((e) => {

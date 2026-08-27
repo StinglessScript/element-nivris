@@ -34,6 +34,7 @@ import {
     relaunchElement,
     findElementApp,
     checkWritePermission,
+    canWriteToResourcesDir,
 } from "./lib/apply-update.mjs";
 
 const helperDir = path.dirname(fileURLToPath(import.meta.url));
@@ -219,6 +220,25 @@ const server = http.createServer((req, res) => {
 
     if (req.method === "GET" && req.url === "/update/progress") {
         res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(progress));
+        return;
+    }
+
+    // Lets install-nivris.mjs check, right at the end of the initial install (while the user is
+    // already mid-setup, Terminal/Settings top of mind), whether *this exact helper process*
+    // already has the write access it'll need for future updates — instead of only discovering a
+    // missing grant later, mid-session, when an unrelated background update silently fails.
+    if (req.method === "GET" && req.url === "/can-write") {
+        const { patched } = readStatus();
+        if (!patched) {
+            res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ canWrite: null }));
+            return;
+        }
+        const resourcesDir = findElementApp({
+            fail: () => {
+                throw new Error("not found");
+            },
+        });
+        res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ canWrite: canWriteToResourcesDir(resourcesDir) }));
         return;
     }
 

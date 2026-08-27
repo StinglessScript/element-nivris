@@ -113,6 +113,12 @@ reapplies the patch with one click, no terminal needed. Existing installs from b
 need to run the install command **once more** to get the helper registered; every update after
 that is automatic.
 
+**macOS only**: the install command ends with a check for one *additional*, separate one-time
+grant the background helper needs (Terminal already having "App Management" access doesn't cover
+it — that permission is per-process, and the helper is a different process). If the install log
+prints instructions for this, do it once; everything works normally either way, it's only the
+in-app auto-update button that needs it.
+
 ## Develop
 
 ```bash
