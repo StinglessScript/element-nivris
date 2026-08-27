@@ -54,9 +54,9 @@ for MODE in install uninstall; do
         SRC="scripts/standalone-uninstaller.ts"
     fi
     echo "==> compiling $MODE (arm64)"
-    bun build --compile "${DEFINE_ARGS[@]}" "$SRC" --outfile "$WORK/$MODE-arm64" >/dev/null
+    bun build --compile "${DEFINE_ARGS[@]+"${DEFINE_ARGS[@]}"}" "$SRC" --outfile "$WORK/$MODE-arm64" >/dev/null
     echo "==> compiling $MODE (x64, cross-compiled)"
-    bun build --compile --target=bun-darwin-x64-baseline "${DEFINE_ARGS[@]}" "$SRC" --outfile "$WORK/$MODE-x64" >/dev/null
+    bun build --compile --target=bun-darwin-x64-baseline "${DEFINE_ARGS[@]+"${DEFINE_ARGS[@]}"}" "$SRC" --outfile "$WORK/$MODE-x64" >/dev/null
     echo "==> lipo universal binary"
     lipo -create "$WORK/$MODE-arm64" "$WORK/$MODE-x64" -output "$WORK/$MODE-universal"
     chmod +x "$WORK/$MODE-universal"
