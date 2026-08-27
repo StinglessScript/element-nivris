@@ -19,14 +19,44 @@ WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 
 echo "==> vite build"
+# NIVRIS_UPDATE_TOKEN is a placeholder, not a real secret — this build is embedded into every copy
+# of the installer, so it can't carry any one user's real per-machine token (see TOKEN_PLACEHOLDER's
+# doc comment in scripts/lib/apply-update.mjs; standalone-installer.ts substitutes the real one in
+# at install time). NIVRIS_UPDATE_PORT isn't machine-specific, so it's fine to bake in directly.
+NIVRIS_BUILD_SHA=$(git rev-parse HEAD) \
+NIVRIS_UPDATE_TOKEN=__NIVRIS_TOKEN_PLACEHOLDER__ \
+NIVRIS_UPDATE_PORT=47291 \
 npm run build >/dev/null
 
+echo "==> compiling update helper (arm64)"
+bun build --compile scripts/nivris-update-helper.mjs --outfile "$WORK/helper-arm64" >/dev/null
+echo "==> compiling update helper (x64, cross-compiled)"
+bun build --compile --target=bun-darwin-x64-baseline scripts/nivris-update-helper.mjs --outfile "$WORK/helper-x64" >/dev/null
+echo "==> lipo universal update helper binary"
+lipo -create "$WORK/helper-arm64" "$WORK/helper-x64" -output "$WORK/helper-universal"
+chmod +x "$WORK/helper-universal"
+codesign -s - --force "$WORK/helper-universal"
+mkdir -p dist
+# Literal ".exe" name even on macOS — standalone-installer.ts's embed import path is identical
+# across both platforms' separate compile jobs (see its doc comment); harmless on macOS, which
+# doesn't care about file extensions for executability.
+cp "$WORK/helper-universal" dist/nivris-update-helper-bin.exe
+
+NIVRIS_BUILD_SHA_VALUE=$(git rev-parse HEAD)
+
 for MODE in install uninstall; do
-    if [ "$MODE" = "install" ]; then SRC="scripts/standalone-installer.ts"; else SRC="scripts/standalone-uninstaller.ts"; fi
+    DEFINE_ARGS=()
+    if [ "$MODE" = "install" ]; then
+        SRC="scripts/standalone-installer.ts"
+        # Only standalone-installer.ts references this global — see its own doc comment.
+        DEFINE_ARGS=(--define "NIVRIS_BUILD_SHA=\"$NIVRIS_BUILD_SHA_VALUE\"")
+    else
+        SRC="scripts/standalone-uninstaller.ts"
+    fi
     echo "==> compiling $MODE (arm64)"
-    bun build --compile "$SRC" --outfile "$WORK/$MODE-arm64" >/dev/null
+    bun build --compile "${DEFINE_ARGS[@]}" "$SRC" --outfile "$WORK/$MODE-arm64" >/dev/null
     echo "==> compiling $MODE (x64, cross-compiled)"
-    bun build --compile --target=bun-darwin-x64-baseline "$SRC" --outfile "$WORK/$MODE-x64" >/dev/null
+    bun build --compile --target=bun-darwin-x64-baseline "${DEFINE_ARGS[@]}" "$SRC" --outfile "$WORK/$MODE-x64" >/dev/null
     echo "==> lipo universal binary"
     lipo -create "$WORK/$MODE-arm64" "$WORK/$MODE-x64" -output "$WORK/$MODE-universal"
     chmod +x "$WORK/$MODE-universal"

@@ -18,6 +18,7 @@ import { finish, log as logRaw } from "./lib/finish";
 import { findElementResourcesDirWindows } from "./lib/find-element-windows.mjs";
 import { setProgress, startProgress } from "./lib/progress-win";
 import { quitElementIfRunning } from "./lib/quit-element";
+import { unregisterHelperService } from "./lib/updater-service.mjs";
 
 const TITLE = "Gỡ N.I.V.R.I.S.";
 
@@ -115,6 +116,8 @@ async function main(): Promise<void> {
             log(`Cảnh báo: không đọc được ${configPath}, bỏ qua bước dọn config.`);
         }
     }
+
+    unregisterHelperService({ log });
 
     log("XONG. Mở lại Element — về trạng thái gốc, không còn N.I.V.R.I.S.");
     finish(TITLE, true, "Đã gỡ N.I.V.R.I.S. thành công.\n\nMở lại Element để xác nhận.");

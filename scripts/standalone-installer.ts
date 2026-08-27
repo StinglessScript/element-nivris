@@ -14,22 +14,63 @@ Please see LICENSE files in the repository root for full details.
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import crypto from "node:crypto";
 
 import { finish, log as logRaw } from "./lib/finish";
 import { findElementResourcesDirWindows } from "./lib/find-element-windows.mjs";
 import { setProgress, startProgress } from "./lib/progress-win";
 import { quitElementIfRunning } from "./lib/quit-element";
+import { helperInstallDir, registerHelperService } from "./lib/updater-service.mjs";
 
 // Embeds lib/index.js into the compiled binary; at runtime (compiled or not) this resolves to a
 // real file path on disk (Bun extracts embedded files to a temp dir when running as a compiled
 // executable). Run `npm run build` before compiling so this file exists to embed.
 import builtJsPath from "../lib/index.js" with { type: "file" };
 
+// The persistent update helper is itself a separately bun-compiled, self-contained binary (see
+// .github/workflows/release.yml — compiled from nivris-update-helper.mjs *before* this installer,
+// so it exists on disk to embed here) rather than a plain .mjs script: this installer has no
+// surrounding `scripts/` checkout on disk, and no guarantee of a system Node/Bun install, for a
+// LaunchAgent/Scheduled Task to later run a script *with*. Always named with a literal ".exe" even
+// on macOS (harmless — Unix doesn't care about extensions) so this same import path resolves on
+// both platforms' separate compile jobs. See installHelperFilesStandalone() below.
+import helperBinaryPath from "../dist/nivris-update-helper-bin.exe" with { type: "file" };
+
+// Baked in by `bun build --compile --define` at CI build time (see .github/workflows/release.yml)
+// — this compiled binary has no git checkout to read a commit SHA from at runtime, and the module
+// it embeds was built as the one shared public CI artifact (see TOKEN_PLACEHOLDER's doc comment in
+// scripts/lib/apply-update.mjs), so it can't have any one user's real update token baked in either.
+declare const NIVRIS_BUILD_SHA: string;
+const TOKEN_PLACEHOLDER = "__NIVRIS_TOKEN_PLACEHOLDER__";
+const NIVRIS_REPO = "StinglessScript/element-nivris";
+const HELPER_PORT = 47291;
+
 const TITLE = "Cài đặt N.I.V.R.I.S.";
 
 function log(msg: string): void {
     logRaw("nivris-install", msg);
 }
+/**
+ * Standalone-binary equivalent of scripts/lib/updater-service.mjs's installHelperFiles() — that
+ * version copies the plain-.mjs helper + its ./lib deps from a real `scripts/` checkout on disk,
+ * which doesn't exist here. The compiled helper binary is embedded at compile time (import above);
+ * Bun extracts it to a real temp path at runtime, readable via fs.readFileSync but not
+ * copyFileSync (same restriction noted for builtJsPath above), so this reads and rewrites its
+ * bytes instead of copying the file — and sets the executable bit, which a plain byte copy doesn't
+ * preserve on macOS/Linux.
+ */
+function installHelperFilesStandalone(): { dir: string; execPath: string; token: string; port: number } {
+    const dir = helperInstallDir();
+    fs.mkdirSync(dir, { recursive: true });
+    const execPath = path.join(dir, process.platform === "win32" ? "nivris-update-helper.exe" : "nivris-update-helper");
+    fs.writeFileSync(execPath, fs.readFileSync(helperBinaryPath));
+    if (process.platform !== "win32") fs.chmodSync(execPath, 0o755);
+
+    const token = crypto.randomBytes(16).toString("hex");
+    fs.writeFileSync(path.join(dir, "helper-config.json"), JSON.stringify({ port: HELPER_PORT, token, repo: NIVRIS_REPO }, null, 4));
+    return { dir, execPath, token, port: HELPER_PORT };
+}
+
 function fail(msg: string): never {
     console.error(`[nivris-install][ERROR] ${msg}`);
     logRaw("nivris-install", `LỖI: ${msg}`);
@@ -125,6 +166,12 @@ async function main(): Promise<void> {
 
     if (!fs.existsSync(builtJsPath)) fail("Không tìm thấy module đã build bên trong file cài đặt này.");
 
+    // Installed/rotated before the module is written so the token can be substituted into it below
+    // — the module has no filesystem access at runtime, so this is the only way it can ever learn
+    // the shared secret the update helper expects.
+    setProgress(35, "Đang cài helper cập nhật nền...");
+    const { dir: helperDir, execPath: helperExecPath, token } = installHelperFilesStandalone();
+
     setProgress(40, "Đang chuẩn bị webapp...");
     try {
         if (fs.existsSync(webappDir)) {
@@ -155,8 +202,12 @@ async function main(): Promise<void> {
         const modulesDir = path.join(webappDir, "modules");
         fs.mkdirSync(modulesDir, { recursive: true });
         // fs.copyFileSync can't read from Bun's virtual "$bunfs" embedded-asset path when running
-        // as a compiled executable — read the bytes out and write them ourselves instead.
-        fs.writeFileSync(path.join(modulesDir, "nivris.js"), fs.readFileSync(builtJsPath));
+        // as a compiled executable — read the bytes out and write them ourselves instead. Also
+        // text-substitutes the shared placeholder token for the real one generated above — see
+        // TOKEN_PLACEHOLDER's doc comment above.
+        const moduleSrc = fs.readFileSync(builtJsPath, "utf-8").split(TOKEN_PLACEHOLDER).join(token);
+        fs.writeFileSync(path.join(modulesDir, "nivris.js"), moduleSrc);
+        fs.writeFileSync(path.join(modulesDir, "nivris.version.json"), JSON.stringify({ sha: NIVRIS_BUILD_SHA }));
         log("Đã copy nivris.js vào webapp/modules/");
     } catch (e) {
         guardPermissionError(e, resourcesDir);
@@ -179,8 +230,10 @@ async function main(): Promise<void> {
     fs.writeFileSync(configPath, JSON.stringify(config, null, 4));
     log(`Đã cập nhật config: ${configPath}`);
 
+    registerHelperService({ execPath: helperExecPath, args: [], helperDir, log });
+
     log("XONG. Mở Element lên để thấy N.I.V.R.I.S.");
-    log("Lưu ý: Element tự cập nhật sẽ ghi đè lại webapp.asar gốc — sau mỗi lần Element tự update, chạy lại file này.");
+    log("Từ giờ, khi có bản mới hoặc Element tự cập nhật ghi đè lại patch, banner trong app sẽ tự cập nhật — không cần chạy lại file này nữa.");
     finish(TITLE, true, "Đã cài đặt N.I.V.R.I.S. thành công!\n\nMở Element lên để bắt đầu dùng.");
 }
 

@@ -64,15 +64,21 @@ function killByPidFile(dir) {
     fs.rmSync(pidFile, { force: true });
 }
 
-/** Registers the helper to start at login and starts it immediately. `nodeExec` is `process.execPath`
- * (absolute path) rather than "node" — LaunchAgent/Task Scheduler run in a minimal login environment
- * whose PATH may not include the user's shell-configured Node. */
-export function registerHelperService({ nodeExec, helperDir, log }) {
-    const scriptPath = path.join(helperDir, "nivris-update-helper.mjs");
-
+/**
+ * Registers the helper to start at login and starts it immediately.
+ *
+ * `execPath` is the actual executable to invoke — either `process.execPath` (absolute path,
+ * rather than "node": LaunchAgent/Task Scheduler run in a minimal login environment whose PATH may
+ * not include the user's shell-configured Node) paired with `args: [scriptPath]` for the plain-Node
+ * `nivris-install` CLI path, or a self-contained compiled helper binary's own path paired with
+ * `args: []` for the standalone-installer path (no separate interpreter, no `scripts/` checkout on
+ * disk for it to run from — see standalone-installer.ts's installHelperFilesStandalone()).
+ */
+export function registerHelperService({ execPath, args = [], helperDir, log }) {
     if (process.platform === "darwin") {
         const plistPath = launchAgentPlistPath();
         fs.mkdirSync(path.dirname(plistPath), { recursive: true });
+        const argElements = [execPath, ...args].map((a) => `        <string>${a}</string>`).join("\n");
         const plist = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -80,8 +86,7 @@ export function registerHelperService({ nodeExec, helperDir, log }) {
     <key>Label</key><string>${LAUNCH_AGENT_LABEL}</string>
     <key>ProgramArguments</key>
     <array>
-        <string>${nodeExec}</string>
-        <string>${scriptPath}</string>
+${argElements}
     </array>
     <key>RunAtLoad</key><true/>
     <key>KeepAlive</key>
@@ -101,14 +106,15 @@ export function registerHelperService({ nodeExec, helperDir, log }) {
     }
 
     if (process.platform === "win32") {
-        // schtasks can't hide the console window a plain `node.exe` invocation would open at logon —
-        // wrap it in a hidden WScript launcher (window style 0), same trick scripts/lib/progress-win.ts
-        // already uses for its own hidden PowerShell windows.
+        // schtasks can't hide the console window a plain invocation would open at logon — wrap it in
+        // a hidden WScript launcher (window style 0), same trick scripts/lib/progress-win.ts already
+        // uses for its own hidden PowerShell windows.
         const vbsPath = path.join(helperDir, "run-hidden.vbs");
-        fs.writeFileSync(
-            vbsPath,
-            `Set shell = CreateObject("WScript.Shell")\r\nshell.Run """${nodeExec}"" ""${scriptPath}""", 0, False\r\n`,
-        );
+        // Build the real Windows command line first ("path1" "path2" ...), then escape it as a
+        // single VBScript string literal (VBScript escapes a literal `"` inside a string as `""`).
+        const cmdLine = [execPath, ...args].map((a) => `"${a}"`).join(" ");
+        const vbsEscaped = cmdLine.replace(/"/g, '""');
+        fs.writeFileSync(vbsPath, `Set shell = CreateObject("WScript.Shell")\r\nshell.Run "${vbsEscaped}", 0, False\r\n`);
         spawnSync("schtasks", ["/delete", "/tn", WIN_TASK_NAME, "/f"], { stdio: "ignore" }); // ignore failure — may not exist yet
         spawnSync("schtasks", [
             "/create",
@@ -134,7 +140,7 @@ export function registerHelperService({ nodeExec, helperDir, log }) {
 Description=Nivris update helper
 
 [Service]
-ExecStart=${nodeExec} ${scriptPath}
+ExecStart=${[execPath, ...args].join(" ")}
 Restart=on-failure
 
 [Install]

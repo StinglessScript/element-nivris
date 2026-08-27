@@ -90,7 +90,27 @@ jobs:
 
       - run: corepack enable
       - run: npm install
-      - run: npm run build
+
+      # See scripts/build-standalone-mac.sh's matching step for why these env vars, and
+      # scripts/standalone-installer.ts's doc comment for why the helper binary is compiled and
+      # embedded before the installer itself.
+      - name: Build module
+        run: npm run build
+        env:
+          NIVRIS_BUILD_SHA: ${{ github.sha }}
+          NIVRIS_UPDATE_TOKEN: __NIVRIS_TOKEN_PLACEHOLDER__
+          NIVRIS_UPDATE_PORT: "47291"
+
+      - name: Compile update helper
+        run: >
+          bun build --compile
+          --windows-hide-console
+          --windows-icon=assets/icons/AppIcon.ico
+          --windows-title="N.I.V.R.I.S. Update Helper"
+          --windows-publisher="N.I.V.R.I.S."
+          --windows-description="Dich vu cap nhat nen cho N.I.V.R.I.S."
+          scripts/nivris-update-helper.mjs
+          --outfile dist/nivris-update-helper-bin.exe
 
       - name: Compile installer.exe
         run: >
@@ -100,6 +120,7 @@ jobs:
           --windows-title="N.I.V.R.I.S. Installer"
           --windows-publisher="N.I.V.R.I.S."
           --windows-description="Cai dat N.I.V.R.I.S. cho Element Desktop"
+          --define NIVRIS_BUILD_SHA="\"${{ github.sha }}\""
           ./scripts/standalone-installer.ts
           --outfile dist/NivrisInstaller-Windows.exe
 

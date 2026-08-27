@@ -96,7 +96,12 @@ async function main() {
 
     fs.writeFileSync(path.join(webappDir, "modules", "nivris.version.json"), JSON.stringify({ sha }));
 
-    registerHelperService({ nodeExec: process.execPath, helperDir, log });
+    registerHelperService({
+        execPath: process.execPath,
+        args: [path.join(helperDir, "nivris-update-helper.mjs")],
+        helperDir,
+        log,
+    });
 
     log("XONG. Tắt hẳn Element (không chỉ đóng cửa sổ) rồi mở lại để thấy N.I.V.R.I.S.");
     await checkHelperCanWriteAndWarn({ port, token, log });
