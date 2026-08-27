@@ -86,18 +86,23 @@ async function runFullReinstall() {
     setProgress({ label: "Đang tải và cài lại (npx)..." });
     const isWin = process.platform === "win32";
     const res = spawnSync(isWin ? "npx.cmd" : "npx", ["-y", "-p", `github:${config.repo}`, "nivris-install"], { stdio: "ignore" });
+
+    // Always relaunch, even on failure — quitElementIfRunning() above already closed it, so
+    // leaving the user with no Element open at all (on top of a failed update) is much worse than
+    // reopening the still-unpatched-but-working app and showing them what went wrong.
+    setProgress({ label: "Đang khởi động lại Element..." });
+    relaunchElement();
+
     if (res.status !== 0) {
         setProgress({ percent: 100, done: true, ok: false, message: "Cài lại thất bại — cần chạy tay lệnh nivris-install một lần nữa." });
         return;
     }
-
-    setProgress({ percent: 90, label: "Đang khởi động lại Element..." });
-    relaunchElement();
     setProgress({ percent: 100, done: true, ok: true, message: "Xong!" });
 }
 
 async function runFastUpdate() {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "nivris-update-"));
+    let quit = false;
     try {
         setProgress({ percent: 5, label: "Đang kiểm tra bản mới nhất...", done: false, ok: true, message: "" });
         const versionPath = path.join(tmpDir, "nivris-version.json");
@@ -110,18 +115,25 @@ async function runFastUpdate() {
 
         setProgress({ percent: 50, label: "Đang tắt Element..." });
         await quitElementIfRunning((msg) => setProgress({ label: msg }));
+        quit = true;
 
         setProgress({ percent: 65, label: "Đang cài bản mới..." });
         const { webappDir } = await applyNivrisUpdate({
             builtJsPath: jsPath,
             realToken: config.token,
             onStatus: (msg) => setProgress({ label: msg }),
+            errorContext: "helper",
         });
         fs.writeFileSync(path.join(webappDir, "modules", "nivris.version.json"), JSON.stringify({ sha }));
 
         setProgress({ percent: 90, label: "Đang khởi động lại Element..." });
         relaunchElement();
         setProgress({ percent: 100, done: true, ok: true, message: "Xong!" });
+    } catch (e) {
+        // Only Element itself was ever actually closed (the two downloads above happen before
+        // quitting it) — if we got past that point, put it back regardless of what failed next.
+        if (quit) relaunchElement();
+        setProgress({ percent: 100, done: true, ok: false, message: e instanceof Error ? e.message : String(e) });
     } finally {
         fs.rmSync(tmpDir, { recursive: true, force: true });
     }

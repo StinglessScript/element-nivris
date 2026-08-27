@@ -135,9 +135,59 @@ export function buildModule({ moduleDir, log, fail, env }) {
     if (res.status !== 0) fail("Build thất bại — xem log phía trên.");
 }
 
-export function guardPermissionError(e, resourcesDir, { fail }) {
+/**
+ * Best-effort native prompt for the one-time macOS permission grant a fresh background-helper
+ * install needs (see guardPermissionError's "helper" branch doc comment). Mirrors the
+ * "Đóng"/"Mở Cài đặt" dialog scripts/build-app-bundle.sh already shows for the compiled
+ * installer/uninstaller — same one-click deep link to the right Settings pane — plus copies the
+ * exact binary path to the clipboard first, since the Settings "+" file picker has no way to jump
+ * straight to a hidden, deeply-nested nvm path otherwise (Cmd+Shift+G then Cmd+V gets there in two
+ * keystrokes instead of manual Finder navigation).
+ */
+function promptMacAppManagementGrant(execPath) {
+    try {
+        spawnSync("pbcopy", { input: execPath });
+    } catch {
+        // clipboard copy is a nicety, not required — dialog text below still has the raw path
+    }
+    const msg =
+        `Cần cấp quyền cho tiến trình cập nhật nền (đã copy đường dẫn vào clipboard):\\n${execPath}\\n\\n` +
+        `Bấm "Mở Cài đặt" → bấm "+" → Cmd+Shift+G → Cmd+V → Enter → Open → bật toggle lên.\\n` +
+        `Rồi quay lại app, bấm Cập nhật lại.`;
+    try {
+        const choice = spawnSync("osascript", [
+            "-e",
+            `display dialog "${msg}" with title "N.I.V.R.I.S. — Cần cấp quyền" buttons {"Đóng", "Mở Cài đặt"} default button "Mở Cài đặt" with icon caution`,
+            "-e",
+            "button returned of result",
+        ]);
+        if ((choice.stdout ?? "").toString().trim() === "Mở Cài đặt") {
+            spawnSync("open", ["x-apple.systempreferences:com.apple.preference.security?Privacy_AppManagement"]);
+        }
+    } catch {
+        // best-effort — the thrown error's own text still has the manual instructions
+    }
+}
+
+export function guardPermissionError(e, resourcesDir, { fail, errorContext = "cli" }) {
     if (e && (e.code === "EPERM" || e.code === "EACCES")) {
         if (process.platform === "darwin") {
+            if (errorContext === "helper") {
+                // macOS's "App Management" TCC grant is per requesting-process — Terminal already
+                // has it (that's how the initial `nivris-install` run worked), but the background
+                // helper is a *different* process (node, run via LaunchAgent, no Terminal involved)
+                // that's never been granted it, so it needs its own separate grant. One-time only:
+                // once granted, this exact node binary keeps working for every future update.
+                promptMacAppManagementGrant(process.execPath);
+                fail(
+                    `Không có quyền ghi vào ${resourcesDir}.\n` +
+                        "Tiến trình cập nhật nền (node) chưa được cấp quyền 'App Management' — quyền này tính riêng theo\n" +
+                        "từng tiến trình, được cấp cho Terminal không có nghĩa là helper chạy nền cũng có.\n" +
+                        `Mở System Settings → Privacy & Security → App Management → bấm "+" → chọn file:\n` +
+                        `  ${process.execPath}\n` +
+                        "rồi bật nó lên. Sau đó thử bấm Cập nhật lại trong app.",
+                );
+            }
             fail(
                 `Không có quyền ghi vào ${resourcesDir}.\n` +
                     "macOS chặn ghi vào bên trong .app trong /Applications trừ khi Terminal (hoặc app đang chạy lệnh này)\n" +
@@ -181,7 +231,7 @@ export function guardPermissionError(e, resourcesDir, { fail }) {
  * the built JS before it's copied in — needed when `builtJsPath` points at the shared public CI
  * build (see TOKEN_PLACEHOLDER's doc comment above).
  */
-export async function applyNivrisUpdate({ moduleDir, builtJsPath, realToken, env = {}, onStatus }) {
+export async function applyNivrisUpdate({ moduleDir, builtJsPath, realToken, env = {}, onStatus, errorContext = "cli" }) {
     const log = (msg) => onStatus?.(msg);
     const fail = (msg) => {
         throw new Error(msg);
@@ -233,7 +283,7 @@ export async function applyNivrisUpdate({ moduleDir, builtJsPath, realToken, env
         if (fs.existsSync(map)) fs.copyFileSync(map, path.join(modulesDir, "nivris.js.map"));
         log("Đã copy nivris.js vào webapp/modules/");
     } catch (e) {
-        guardPermissionError(e, resourcesDir, { fail });
+        guardPermissionError(e, resourcesDir, { fail, errorContext });
     }
 
     const configPath = userConfigPath({ fail });

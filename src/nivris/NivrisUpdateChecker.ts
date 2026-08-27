@@ -83,12 +83,25 @@ function readCache(): CachedCheck | null {
     }
 }
 
+// The floating banner (mounted once at app load) and the Settings panel's "Kiểm tra cập nhật
+// ngay" button each call getUpdateState() independently — without this, a fresh result from one
+// never reaches the other's already-rendered React state, so they can show contradictory info
+// (Settings says "up to date" right after a check that the banner, still holding its stale
+// from-mount state, keeps disagreeing with).
+const listeners = new Set<(state: NivrisUpdateState) => void>();
+
+export function subscribeUpdateState(listener: (state: NivrisUpdateState) => void): () => void {
+    listeners.add(listener);
+    return () => listeners.delete(listener);
+}
+
 function writeCache(state: NivrisUpdateState): void {
     try {
         window.localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), state }));
     } catch {
         // best-effort cache — a failed write just means the next check isn't throttled
     }
+    listeners.forEach((l) => l(state));
 }
 
 /** Checks (throttled to once per CHECK_THROTTLE_MS, unless `force`) whether an update is
@@ -117,6 +130,14 @@ export async function getUpdateState(force = false): Promise<NivrisUpdateState> 
         latestSha && knownCurrentSha && latestSha !== knownCurrentSha ? { kind: "new-version" } : { kind: "up-to-date" };
     writeCache(state);
     return state;
+}
+
+/** The commit currently installed, read straight from disk via the helper — not cached, always
+ * live. Used by the Settings panel so the version shown there can't go stale like the throttled
+ * getUpdateState() cache can. Null if the helper isn't reachable. */
+export async function getInstalledSha(): Promise<string | null> {
+    const status = await fetchHelperStatus();
+    return status?.patched ? status.currentSha : null;
 }
 
 export async function triggerUpdate(): Promise<void> {

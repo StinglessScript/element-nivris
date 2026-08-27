@@ -7,7 +7,14 @@ Please see LICENSE files in the repository root for full details.
 
 import React, { useEffect, useRef, useState } from "react";
 
-import { fetchUpdateProgress, getUpdateState, triggerUpdate, type NivrisUpdateState, type UpdateProgress } from "../nivris/NivrisUpdateChecker";
+import {
+    fetchUpdateProgress,
+    getUpdateState,
+    subscribeUpdateState,
+    triggerUpdate,
+    type NivrisUpdateState,
+    type UpdateProgress,
+} from "../nivris/NivrisUpdateChecker";
 
 const PROGRESS_POLL_MS = 500;
 
@@ -31,7 +38,17 @@ const NivrisUpdateBanner: React.FC = () => {
 
     useEffect(() => {
         void getUpdateState().then((state) => setView(toView(state)));
-        return () => window.clearInterval(pollRef.current);
+        // A fresh check triggered elsewhere (e.g. Settings' "Kiểm tra cập nhật ngay" button) should
+        // update this banner too — but never while an update is actively running/just failed here,
+        // or an unrelated background re-check would silently wipe the progress/error the user is
+        // looking at mid-click.
+        const unsubscribe = subscribeUpdateState((state) => {
+            setView((prev) => (prev.phase === "updating" || prev.phase === "failed" ? prev : toView(state)));
+        });
+        return () => {
+            window.clearInterval(pollRef.current);
+            unsubscribe();
+        };
     }, []);
 
     const onUpdate = (): void => {

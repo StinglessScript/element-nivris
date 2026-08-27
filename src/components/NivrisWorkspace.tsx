@@ -48,6 +48,7 @@ import { ensureNivrisIngestStarted, rescanToday, runReportReminderCheckNow, star
 import { getMatrixClient } from "../matrixClient";
 import { clearAllMessages, getMessagesByThreadRoot, getMessagesSince, type StoredNivrisMessage } from "../nivris/NivrisMessageDb";
 import NivrisEntityPicker, { type NivrisPickerEntity } from "./NivrisEntityPicker";
+import { getInstalledSha, getUpdateState } from "../nivris/NivrisUpdateChecker";
 
 const TYPE_ICON: Record<NivrisTrackerType, JSX.Element> = {
     boss: <UserIcon width="13px" height="13px" />,
@@ -1240,6 +1241,32 @@ const SettingsPanel: React.FC<{
     );
     const [scanningNow, setScanningNow] = useState(false);
     const [scanResult, setScanResult] = useState<string[] | null>(null);
+    const [installedSha, setInstalledSha] = useState<string | null | "loading">("loading");
+    const [checkingUpdate, setCheckingUpdate] = useState(false);
+    const [updateCheckResult, setUpdateCheckResult] = useState<string | null>(null);
+
+    useEffect(() => {
+        void getInstalledSha().then(setInstalledSha);
+    }, []);
+
+    const checkForUpdateNow = async (): Promise<void> => {
+        setCheckingUpdate(true);
+        setUpdateCheckResult(null);
+        try {
+            const state = await getUpdateState(true);
+            setUpdateCheckResult(
+                state.kind === "up-to-date"
+                    ? "Đã ở bản mới nhất."
+                    : state.kind === "new-version"
+                      ? "Có bản mới — bấm nút Cập nhật ở góc dưới màn hình."
+                      : state.kind === "patch-missing"
+                        ? "Element vừa tự cập nhật và gỡ N.I.V.R.I.S. — bấm nút Cài lại ở góc dưới màn hình."
+                        : "Không kết nối được tới helper cập nhật nền. Cần chạy lại nivris-install một lần để bật tính năng tự cập nhật.",
+            );
+        } finally {
+            setCheckingUpdate(false);
+        }
+    };
 
     const scanNow = async (): Promise<void> => {
         setScanningNow(true);
@@ -1371,6 +1398,19 @@ const SettingsPanel: React.FC<{
                             XOÁ CACHE
                         </button>
                         {cleared && <span className="mx_NivrisWorkspace_settingsSavedNote">Đã xoá & quét lại tin hôm nay.</span>}
+                    </div>
+                </div>
+
+                <div>
+                    <div className="mx_NivrisWorkspace_sectionLabel">CẬP NHẬT</div>
+                    <div className="mx_NivrisWorkspace_settingsSavedNote">
+                        Phiên bản đang cài: {installedSha === "loading" ? "…" : installedSha ? installedSha.slice(0, 7) : "không rõ"}
+                    </div>
+                    <div className="mx_NivrisWorkspace_storageActions">
+                        <button className="mx_NivrisWorkspace_storageSecondaryBtn" disabled={checkingUpdate} onClick={checkForUpdateNow}>
+                            {checkingUpdate ? "ĐANG KIỂM TRA..." : "KIỂM TRA CẬP NHẬT NGAY"}
+                        </button>
+                        {updateCheckResult && <span className="mx_NivrisWorkspace_settingsSavedNote">{updateCheckResult}</span>}
                     </div>
                 </div>
 
