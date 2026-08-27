@@ -20,6 +20,18 @@ const PROGRESS_POLL_MS = 500;
 
 type ViewState = { phase: "hidden" } | { phase: "prompt"; kind: "new-version" | "patch-missing" } | { phase: "updating"; progress: UpdateProgress } | { phase: "failed"; message: string };
 
+// Matches the absolute node path guardPermissionError's "helper" branch (apply-update.mjs) always
+// includes on its own line — used to offer a one-click clipboard copy, since a background
+// LaunchAgent's own "open System Settings" attempt isn't reliable across every macOS Automation
+// permission state, but copying text never needs any OS permission at all.
+const NODE_PATH_RE = /^ {2}(\/.*\/(?:node|node\.exe))$/m;
+
+function copyToClipboard(text: string): void {
+    void navigator.clipboard?.writeText(text).catch(() => {
+        // clipboard permission denied/unavailable — the path is still visible in the message text
+    });
+}
+
 function toView(state: NivrisUpdateState): ViewState {
     if (state.kind === "new-version" || state.kind === "patch-missing") return { phase: "prompt", kind: state.kind };
     return { phase: "hidden" };
@@ -93,6 +105,16 @@ const NivrisUpdateBanner: React.FC = () => {
             {view.phase === "failed" && (
                 <>
                     <span className="mx_NivrisUpdateBanner_text mx_NivrisUpdateBanner_text_error">{view.message}</span>
+                    {(() => {
+                        const nodePath = NODE_PATH_RE.exec(view.message)?.[1];
+                        return (
+                            nodePath && (
+                                <button className="mx_NivrisUpdateBanner_btn" onClick={() => copyToClipboard(nodePath)}>
+                                    Copy đường dẫn
+                                </button>
+                            )
+                        );
+                    })()}
                     <button className="mx_NivrisUpdateBanner_btn" onClick={onUpdate}>
                         Thử lại
                     </button>

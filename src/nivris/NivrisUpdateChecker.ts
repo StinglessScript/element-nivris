@@ -40,6 +40,12 @@ export interface UpdateProgress {
 interface CachedCheck {
     ts: number;
     state: NivrisUpdateState;
+    /** The installed SHA this result was computed against — if the helper now reports a different
+     * one (an update just landed, e.g. Element was just relaunched after applying it), the cache is
+     * stale regardless of how recently it was written. Without this, a successful update leaves the
+     * fresh post-relaunch banner reading the pre-update "new-version" verdict straight out of cache
+     * until the throttle window happens to expire or someone force-checks. */
+    sha: string | null;
 }
 
 function authHeaders(): Record<string, string> {
@@ -95,40 +101,46 @@ export function subscribeUpdateState(listener: (state: NivrisUpdateState) => voi
     return () => listeners.delete(listener);
 }
 
-function writeCache(state: NivrisUpdateState): void {
+function writeCache(state: NivrisUpdateState, sha: string | null): void {
     try {
-        window.localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), state }));
+        window.localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), state, sha }));
     } catch {
         // best-effort cache — a failed write just means the next check isn't throttled
     }
     listeners.forEach((l) => l(state));
 }
 
-/** Checks (throttled to once per CHECK_THROTTLE_MS, unless `force`) whether an update is
- * available. Combines the helper's live on-disk status with the latest published release SHA. */
+/** Checks whether an update is available. The helper call (local, no rate limit) always runs
+ * fresh; only the GitHub lookup (rate-limited) is throttled to once per CHECK_THROTTLE_MS — and
+ * even that's skipped if the installed SHA has changed since the cached result, which is what
+ * makes a just-applied update reflect immediately on the very next check instead of waiting out
+ * the throttle window or requiring a manual force-check. */
 export async function getUpdateState(force = false): Promise<NivrisUpdateState> {
-    const cached = readCache();
-    if (!force && cached && Date.now() - cached.ts < CHECK_THROTTLE_MS) return cached.state;
-
     const status = await fetchHelperStatus();
     if (!status?.helperRunning) {
         const state: NivrisUpdateState = { kind: "helper-unreachable" };
-        writeCache(state);
+        writeCache(state, null);
         return state;
     }
     if (!status.patched) {
         const state: NivrisUpdateState = { kind: "patch-missing" };
-        writeCache(state);
+        writeCache(state, status.currentSha);
         return state;
     }
 
-    const latestSha = await fetchLatestSha();
     // "unknown" is a real value install-nivris.mjs can write (couldn't resolve its own commit) —
     // treat it like "no data" rather than let it always mismatch and false-flag every such install.
     const knownCurrentSha = status.currentSha && status.currentSha !== "unknown" ? status.currentSha : null;
+
+    const cached = readCache();
+    if (!force && cached && cached.sha === knownCurrentSha && Date.now() - cached.ts < CHECK_THROTTLE_MS) {
+        return cached.state;
+    }
+
+    const latestSha = await fetchLatestSha();
     const state: NivrisUpdateState =
         latestSha && knownCurrentSha && latestSha !== knownCurrentSha ? { kind: "new-version" } : { kind: "up-to-date" };
-    writeCache(state);
+    writeCache(state, knownCurrentSha);
     return state;
 }
 

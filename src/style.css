@@ -1143,7 +1143,9 @@ body[class*="cpd-theme-dark"] {
     z-index: 10000;
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 12px;
+    max-width: min(90vw, 520px);
     padding: 10px 14px;
     border-radius: 8px;
     background-color: var(--jv-surface);
@@ -1151,8 +1153,8 @@ body[class*="cpd-theme-dark"] {
     box-shadow: 0 6px 20px rgb(0 0 0 / 18%);
     font-family: var(--jv-sans);
 }
-.mx_NivrisUpdateBanner_text { font: 400 12px var(--jv-sans); color: var(--jv-ink); }
-.mx_NivrisUpdateBanner_text_error { color: var(--jv-danger); }
+.mx_NivrisUpdateBanner_text { font: 400 12px var(--jv-sans); color: var(--jv-ink); white-space: pre-line; }
+.mx_NivrisUpdateBanner_text_error { color: var(--jv-danger); max-width: 420px; }
 .mx_NivrisUpdateBanner_btn {
     flex-shrink: 0;
     height: 26px;
