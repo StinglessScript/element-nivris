@@ -128,9 +128,10 @@ async function checkHelperCanWriteAndWarn({ port, token, log }) {
             if (canWrite === false) {
                 log("");
                 log("QUAN TRỌNG — cần thêm 1 bước, làm 1 LẦN DUY NHẤT để bật cập nhật tự động trong app sau này:");
-                log(`  System Settings → Privacy & Security → App Management → bấm "+" → chọn file: ${process.execPath}`);
-                log(`  rồi bật nó lên. Không làm bước này thì mọi thứ vẫn dùng được bình thường, chỉ là`);
-                log(`  banner "Cập nhật" trong app sẽ không tự chạy được cho tới khi bạn làm bước trên.`);
+                log(`  System Settings → Privacy & Security → App Management → bấm "+".`);
+                log(`  Trong cửa sổ chọn file, nhấn Cmd+Shift+G (Library bị Finder ẩn mặc định) rồi dán: ${process.execPath}`);
+                log(`  Enter → chọn file → Open → bật toggle lên. Không làm bước này thì mọi thứ vẫn dùng được`);
+                log(`  bình thường, chỉ là banner "Cập nhật" trong app sẽ không tự chạy được cho tới khi làm bước trên.`);
             }
             return;
         } catch {

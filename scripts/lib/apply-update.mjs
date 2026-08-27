@@ -187,9 +187,11 @@ function permissionErrorMessage(resourcesDir, errorContext) {
                 `Không có quyền ghi vào ${resourcesDir}.\n` +
                 "Tiến trình cập nhật nền (node) chưa được cấp quyền 'App Management' — quyền này tính riêng theo\n" +
                 "từng tiến trình, được cấp cho Terminal không có nghĩa là helper chạy nền cũng có.\n" +
-                `Mở System Settings → Privacy & Security → App Management → bấm "+" → chọn file:\n` +
+                `Mở System Settings → Privacy & Security → App Management → bấm "+".\n` +
+                `Trong cửa sổ chọn file hiện ra, nhấn Cmd+Shift+G (thư mục Library bị Finder ẩn mặc định,\n` +
+                `phím tắt này mở ô nhập đường dẫn trực tiếp, bỏ qua việc phải click mở từng thư mục), dán:\n` +
                 `  ${process.execPath}\n` +
-                "rồi bật nó lên. Sau đó thử bấm Cập nhật lại trong app.\n" +
+                "rồi Enter → chọn file → Open → bật toggle lên. Sau đó thử bấm Cập nhật lại trong app.\n" +
                 "(Trên vài bản macOS mới, mục này có thể nằm dưới tên khác trong Privacy & Security" +
                 " — thử tìm mục nào cho phép 1 app sửa app khác nếu không thấy đúng tên 'App Management'.)"
             );
