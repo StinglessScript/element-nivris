@@ -123,14 +123,31 @@ ${argElements}
         // schtasks can't hide the console window a plain invocation would open at logon — wrap it in
         // a hidden WScript launcher (window style 0), same trick scripts/lib/progress-win.ts already
         // uses for its own hidden PowerShell windows.
-        const vbsPath = path.join(helperDir, "run-hidden.vbs");
-        // Build the real Windows command line first ("path1" "path2" ...), then escape it as a
-        // single VBScript string literal (VBScript escapes a literal `"` inside a string as `""`).
+        //
+        // Unlike the macOS LaunchAgent (StandardOutPath/StandardErrorPath, set by launchd itself),
+        // nothing captures this process's console output on Windows — a hidden wscript-launched
+        // process's stdout/stderr just vanish, so a crash on startup (bad Node version, missing
+        // file, whatever) used to leave no trace anywhere to diagnose. Fixed by writing the real
+        // command (with its `>>` log redirect) into an ordinary .cmd file — plain batch syntax, so
+        // quoting a path with spaces is just one unambiguous layer, same as typing it into a cmd
+        // window — instead of trying to thread it through cmd.exe's own quote-stripping rules AND
+        // VBScript's string-literal escaping at once, where the two nest badly (cmd strips exactly
+        // the outermost matching quote pair from its /c argument; anything more complex than a
+        // single quoted path plus unquoted arguments left adjacent quote pairs that Windows argv
+        // parsing doesn't handle the way it looks like it should on paper).
+        const cmdPath = path.join(helperDir, "run-helper.cmd");
+        const logPath = path.join(helperDir, "helper.log");
         const cmdLine = [execPath, ...args].map((a) => `"${a}"`).join(" ");
-        const vbsEscaped = cmdLine.replace(/"/g, '""');
+        fs.writeFileSync(cmdPath, `@echo off\r\n${cmdLine} >> "${logPath}" 2>&1\r\n`);
+
+        const vbsPath = path.join(helperDir, "run-hidden.vbs");
+        // The only thing shell.Run needs quoted here is this one .cmd path (may contain spaces,
+        // e.g. under "C:\Users\Some Name\...") — VBScript escapes a literal `"` inside a string
+        // literal as `""`, so quoting it for shell.Run's own argument means doubling those two.
+        const vbsEscaped = `"${cmdPath}"`.replace(/"/g, '""');
         fs.writeFileSync(vbsPath, `Set shell = CreateObject("WScript.Shell")\r\nshell.Run "${vbsEscaped}", 0, False\r\n`);
         spawnSync("schtasks", ["/delete", "/tn", WIN_TASK_NAME, "/f"], { stdio: "ignore" }); // ignore failure — may not exist yet
-        spawnSync("schtasks", [
+        const createRes = spawnSync("schtasks", [
             "/create",
             "/tn",
             WIN_TASK_NAME,
@@ -141,8 +158,24 @@ ${argElements}
             "/rl",
             "limited",
             "/f",
-        ]);
-        spawnSync("schtasks", ["/run", "/tn", WIN_TASK_NAME], { stdio: "ignore" });
+        ], { encoding: "utf-8" });
+
+        // Previously unchecked — a failed /create (bad quoting, permissions, locale, ...) used to
+        // silently leave no scheduled task registered at all while still logging success, which is
+        // indistinguishable from a working install until the update banner mysteriously never
+        // connects to the helper. Surface the real error instead of guessing at it after the fact.
+        if (createRes.status !== 0) {
+            const detail = (createRes.stderr || createRes.stdout || "").toString().trim() || `mã lỗi ${createRes.status}`;
+            log?.(`LỖI đăng ký Scheduled Task cho helper cập nhật: ${detail}`);
+            return;
+        }
+
+        const runRes = spawnSync("schtasks", ["/run", "/tn", WIN_TASK_NAME], { encoding: "utf-8" });
+        if (runRes.status !== 0) {
+            const detail = (runRes.stderr || runRes.stdout || "").toString().trim() || `mã lỗi ${runRes.status}`;
+            log?.(`Đã đăng ký Scheduled Task nhưng chạy thử thất bại: ${detail}`);
+            return;
+        }
         log?.("Đã đăng ký Scheduled Task cho helper cập nhật.");
         return;
     }
