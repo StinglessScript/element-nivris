@@ -76,7 +76,7 @@ async function main() {
     // Installed/rotated before the build so the token can be baked into the bundle the build step
     // produces — the module has no filesystem access at runtime, so this is the only way it can
     // ever learn the shared secret the update helper expects.
-    const { dir: helperDir, token, port } = installHelperFiles({
+    const { dir: helperDir, token, port } = await installHelperFiles({
         scriptsDir: path.dirname(fileURLToPath(import.meta.url)),
         repo: NIVRIS_REPO,
         log,

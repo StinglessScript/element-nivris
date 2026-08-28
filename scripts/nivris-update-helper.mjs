@@ -13,20 +13,19 @@ Please see LICENSE files in the repository root for full details.
 // on 127.0.0.1 only, gated by a token baked into both this helper's own config and the built
 // module bundle at install time (neither side ever transmits it — see install-nivris.mjs).
 //
-// Two update paths:
-//  - Common case: webapp/ already exists (previously patched) -> download the prebuilt nivris.js
-//    from the latest GitHub Release and swap it in directly. Fast, no npm/vite/asar needed.
-//  - Rare case: webapp/ is missing (Element reinstalled itself fresh, wiping the whole patch back
-//    to a stock webapp.asar) -> shell out to `npx -y -p github:<repo> nivris-install`, the same
-//    fully-dependency-resolved path the very first manual install uses. This standalone helper
-//    directory doesn't carry its own copy of @electron/asar (only needed for that one-time
-//    extraction), so it defers to npx rather than trying to bundle that dependency itself.
+// Always downloads the prebuilt nivris.js from the latest GitHub Release and applies it via
+// applyNivrisUpdate() (see ./lib/apply-update.mjs), which handles both cases on its own: webapp/
+// already exists (previously patched) -> swap the module in directly; webapp/ is missing (Element
+// reinstalled itself fresh — e.g. its own auto-updater wiped the patch back to a stock
+// webapp.asar) -> re-extract webapp.asar first. This file is bundled (see
+// scripts/lib/bundle-helper.mjs, used by installHelperFiles()) into a single self-contained script
+// before being installed as the persistent helper, so @electron/asar — needed for that extraction
+// — travels with it with no node_modules/npx/network fetch required at update time.
 
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import http from "node:http";
-import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import {
     applyNivrisUpdate,
@@ -96,42 +95,13 @@ function readStatus() {
     }
 }
 
-async function runFullReinstall() {
-    setProgress({ percent: 10, label: "Element vừa tự cập nhật — đang cài lại N.I.V.R.I.S...", done: false, ok: true, message: "" });
-
-    // Fail fast on a permission problem, before ever touching Element — a doomed update has no
-    // business closing an app the user is actively using.
-    const resourcesDir = findElementApp({
-        fail: (msg) => {
-            throw new Error(msg);
-        },
-    });
-    checkWritePermission(resourcesDir, "helper");
-
-    await quitElementIfRunning((msg) => setProgress({ label: msg }));
-
-    setProgress({ label: "Đang tải và cài lại (npx)..." });
-    const isWin = process.platform === "win32";
-    const res = spawnSync(isWin ? "npx.cmd" : "npx", ["-y", "-p", `github:${config.repo}`, "nivris-install"], { stdio: "ignore" });
-
-    // Always relaunch, even on failure — quitElementIfRunning() above already closed it, so
-    // leaving the user with no Element open at all (on top of a failed update) is much worse than
-    // reopening the still-unpatched-but-working app and showing them what went wrong.
-    setProgress({ label: "Đang khởi động lại Element..." });
-    relaunchElement();
-
-    if (res.status !== 0) {
-        setProgress({ percent: 100, done: true, ok: false, message: "Cài lại thất bại — cần chạy tay lệnh nivris-install một lần nữa." });
-        return;
-    }
-    setProgress({ percent: 100, done: true, ok: true, message: "Xong!" });
-}
-
 async function runFastUpdate() {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "nivris-update-"));
     let quit = false;
     try {
-        setProgress({ percent: 5, label: "Đang kiểm tra bản mới nhất...", done: false, ok: true, message: "" });
+        const { patched } = readStatus();
+        const startLabel = patched ? "Đang kiểm tra bản mới nhất..." : "Element vừa tự cập nhật — đang cài lại N.I.V.R.I.S...";
+        setProgress({ percent: 5, label: startLabel, done: false, ok: true, message: "" });
 
         // Fail fast on a permission problem — before downloading anything, and well before
         // quitElementIfRunning() below, so a doomed update never has to close the app at all.
@@ -180,12 +150,7 @@ async function handleUpdate() {
     if (updating) return;
     updating = true;
     try {
-        const { patched } = readStatus();
-        if (patched) {
-            await runFastUpdate();
-        } else {
-            await runFullReinstall();
-        }
+        await runFastUpdate();
     } catch (e) {
         setProgress({ percent: 100, done: true, ok: false, message: e instanceof Error ? e.message : String(e) });
     } finally {

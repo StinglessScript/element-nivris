@@ -36,15 +36,29 @@ function systemdUnitPath() {
     return path.join(realHomeDir(), `.config/systemd/user/${SYSTEMD_UNIT}`);
 }
 
-/** Copies the helper script + its ./lib deps into a stable location, independent of the ephemeral
- * npx-fetched repo checkout that's running this installer. Regenerates the shared secret every
- * time (rotates on every update, install-nivris.mjs bakes the same value into the built module). */
-export function installHelperFiles({ scriptsDir, repo, log }) {
+/**
+ * Bundles the helper script + its ./lib deps (including @electron/asar, needed to re-extract a
+ * fresh webapp.asar after Element's own auto-updater wipes the patch) into a single self-contained
+ * file at a stable location, independent of the ephemeral npx-fetched repo checkout that's running
+ * this installer — see bundle-helper.mjs's doc comment for why this needs to be a bundle rather
+ * than plain copies. Regenerates the shared secret every time (rotates on every update,
+ * install-nivris.mjs bakes the same value into the built module).
+ *
+ * Only this plain-Node install path (`nivris-install` via npm/npx) needs bundling at install time
+ * — the standalone Bun-compiled installer (standalone-installer.ts) gets an equivalent bundle for
+ * free from `bun build --compile` and never calls this function. bundle-helper.mjs is imported
+ * dynamically, not at this file's top level, specifically so that fact holds: `rollup` ships a
+ * platform-native addon (e.g. @rollup/rollup-darwin-arm64) that Bun's compiler can't embed, so a
+ * static top-level import here would drag rollup's eager native-binary load into every consumer of
+ * this module — including standalone-installer.ts, which imports helperInstallDir/
+ * registerHelperService from this same file — and crash the compiled standalone installer on
+ * startup even though it never calls installHelperFiles at all.
+ */
+export async function installHelperFiles({ scriptsDir, repo, log }) {
     const dir = helperInstallDir();
-    fs.mkdirSync(path.join(dir, "lib"), { recursive: true });
-    fs.copyFileSync(path.join(scriptsDir, "nivris-update-helper.mjs"), path.join(dir, "nivris-update-helper.mjs"));
-    fs.copyFileSync(path.join(scriptsDir, "lib/apply-update.mjs"), path.join(dir, "lib/apply-update.mjs"));
-    fs.copyFileSync(path.join(scriptsDir, "lib/find-element-windows.mjs"), path.join(dir, "lib/find-element-windows.mjs"));
+    fs.mkdirSync(dir, { recursive: true });
+    const { bundleHelperScript } = await import("./bundle-helper.mjs");
+    await bundleHelperScript(path.join(scriptsDir, "nivris-update-helper.mjs"), path.join(dir, "nivris-update-helper.mjs"));
 
     const token = crypto.randomBytes(16).toString("hex");
     fs.writeFileSync(path.join(dir, "helper-config.json"), JSON.stringify({ port: HELPER_PORT, token, repo }, null, 4));
