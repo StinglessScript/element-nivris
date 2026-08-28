@@ -14,10 +14,11 @@ export interface NivrisSettings {
     /** Desktop notifications when a live message matches an active tracker. */
     notificationsEnabled: boolean;
     /**
-     * Two daily reminders — notify if a report-tagged person hasn't sent any tracked message by
-     * this time of day (a proxy for "chưa báo cáo công việc", since there's no way to tell an
-     * actual report apart from other messages without an AI call per message). Morning is meant to
-     * catch "chưa báo việc hôm nay lên nhóm", evening for the end-of-day report.
+     * Two daily reminders — notify if a report-tagged person hasn't actually reported work by this
+     * time of day. When an AI key is configured, "reported" is an AI classification of whether any
+     * of today's messages reads as a real work report; otherwise it falls back to the coarser proxy
+     * of having sent any tracked message at all. Morning is meant to catch "chưa báo việc hôm nay
+     * lên nhóm", evening for the end-of-day report.
      */
     morningReportReminderEnabled: boolean;
     /** 24h "HH:mm" local time. */

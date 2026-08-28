@@ -46,6 +46,8 @@ import {
 } from "./NivrisMessageDb";
 import NivrisTrackerStore, { type NivrisUserTracker } from "./NivrisTrackerStore";
 import { PRIORITY_KEYWORDS } from "./constants";
+import { askNivris } from "./NivrisApi";
+import { DEFAULT_NIVRIS_SETTINGS, isNivrisConfigured, type NivrisSettings } from "./types";
 
 const RETENTION_DAYS = 7;
 const MAX_BACKFILL_PAGES_PER_ROOM = 10;
@@ -87,6 +89,10 @@ function readSettings(): Record<string, unknown> {
     } catch {
         return {};
     }
+}
+
+function readNivrisSettings(): NivrisSettings {
+    return { ...DEFAULT_NIVRIS_SETTINGS, ...readSettings() } as NivrisSettings;
 }
 
 function isRoomIgnored(roomId: string): boolean {
@@ -338,14 +344,71 @@ export function rescanToday(): Promise<void> {
 
 const REPORT_REMINDER_CHECK_INTERVAL_MS = 60_000;
 
-/** Employees/managers tagged for the daily report who haven't sent a single tracked message
- * today — the closest proxy we have for "chưa báo cáo công việc" without an AI call per message. */
+/**
+ * Whether any of `messages` (one person's messages for today) reads as an actual work report —
+ * not just "they said something". Distinguishing a real status update ("Em bắt đầu làm module X",
+ * "Đã xong phần Y") from ordinary chatter ("ok", "vâng ạ", greetings, off-topic banter) needs real
+ * language understanding, not a keyword list — a fixed list of report-sounding words would miss
+ * every phrasing it wasn't written for and false-negative constantly, which is the "chưa hoạt động
+ * ổn" behavior this replaces. Assumes `messages` is non-empty; callers short-circuit the empty case
+ * themselves (that one's an unambiguous "no").
+ */
+async function hasReportedToday(settings: NivrisSettings, messages: StoredNivrisMessage[]): Promise<boolean> {
+    const transcript = messages
+        .slice()
+        .sort((a, b) => a.ts - b.ts)
+        .map((m) => `[${new Date(m.ts).toLocaleTimeString("vi-VN")}] (${m.roomName}) ${m.senderName}: ${m.body}`)
+        .join("\n");
+
+    const systemPrompt = [
+        "Xác định xem trong các tin nhắn hôm nay của một người dưới đây, có tin nào là BÁO CÁO CÔNG VIỆC thật sự hay không.",
+        "BÁO CÁO CÔNG VIỆC: nêu cụ thể đang làm gì / sẽ làm gì / đã làm xong gì (vd: 'Em bắt đầu làm module X', 'Hôm nay em làm: ...', 'Đã xong phần Y', cập nhật tiến độ cụ thể).",
+        "KHÔNG PHẢI báo cáo: chào hỏi, cảm ơn, xác nhận đã đọc ('ok', 'vâng ạ', 'received'), hỏi đáp không liên quan tiến độ, trao đổi phiếm, reaction/emoji, hỏi việc người khác.",
+        "Chỉ cần MỘT tin nhắn là báo cáo thật là đủ để coi là đã báo cáo.",
+        'Trả lời DUY NHẤT JSON, không markdown, không giải thích: {"reported": true} hoặc {"reported": false}',
+        "",
+        `Tin nhắn hôm nay:\n${transcript}`,
+    ].join("\n");
+
+    try {
+        const reply = await askNivris(settings, systemPrompt, [{ role: "user", content: "Phân loại theo đúng định dạng JSON yêu cầu." }]);
+        const match = reply.match(/\{[\s\S]*?\}/);
+        const parsed = match ? (JSON.parse(match[0]) as { reported?: unknown }) : null;
+        if (typeof parsed?.reported === "boolean") return parsed.reported;
+        return true; // unparseable reply — fail open rather than false-flagging someone as missing
+    } catch {
+        return true; // AI call failed (offline, rate limited, etc.) — same reasoning
+    }
+}
+
+/** Employees/managers tagged for the daily report who haven't actually reported work today. */
 async function findPeopleWithoutReportToday(): Promise<NivrisUserTracker[]> {
     const todayMessages = await getMessagesSince(startOfToday());
-    const sendersToday = new Set(todayMessages.map((m) => m.sender));
-    return NivrisTrackerStore.instance
+    const messagesBySender = new Map<string, StoredNivrisMessage[]>();
+    for (const m of todayMessages) {
+        const list = messagesBySender.get(m.sender) ?? [];
+        list.push(m);
+        messagesBySender.set(m.sender, list);
+    }
+
+    const employeeTrackers = NivrisTrackerStore.instance
         .getTrackers()
-        .filter((t) => t.type === "boss" && t.isEmployee && t.targetId && !sendersToday.has(t.targetId));
+        .filter((t) => t.type === "boss" && t.isEmployee && t.targetId);
+
+    const settings = readNivrisSettings();
+    const useAi = isNivrisConfigured(settings);
+
+    const checked = await Promise.all(
+        employeeTrackers.map(async (t) => {
+            const messages = messagesBySender.get(t.targetId!) ?? [];
+            if (!messages.length) return { tracker: t, reported: false };
+            // Without an AI key configured there's no way to classify content — fall back to the
+            // old "sent something today" proxy so the feature still does *something* useful.
+            if (!useAi) return { tracker: t, reported: true };
+            return { tracker: t, reported: await hasReportedToday(settings, messages) };
+        }),
+    );
+    return checked.filter((c) => !c.reported).map((c) => c.tracker);
 }
 
 interface ReportReminderConfig {
@@ -389,14 +452,14 @@ async function checkReportReminder(config: ReportReminderConfig): Promise<void> 
     if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
 
     new Notification(config.title, {
-        body: `${missing.length} người chưa thấy tin nhắn hôm nay: ${missing.map((t) => t.label).join(", ")}`,
+        body: `${missing.length} người chưa báo cáo công việc hôm nay: ${missing.map((t) => t.label).join(", ")}`,
         tag: `nivris-report-reminder-${config.metaKey}`,
     });
 }
 
 /** Checks once a minute whether it's past either configured reminder time (morning/evening) and,
- * if so, notifies once per day per reminder about anyone tagged for the report who hasn't sent a
- * tracked message yet. */
+ * if so, notifies once per day per reminder about anyone tagged for the report who hasn't actually
+ * reported work yet (an AI classification of their messages, not just "sent something"). */
 function startReportReminderScheduler(): void {
     window.setInterval(() => {
         for (const config of REPORT_REMINDERS) void checkReportReminder(config);
@@ -411,7 +474,7 @@ export async function runReportReminderCheckNow(): Promise<NivrisUserTracker[]> 
     const missing = await findPeopleWithoutReportToday();
     if (missing.length && typeof Notification !== "undefined" && Notification.permission === "granted") {
         new Notification("N.I.V.R.I.S. — Quét nhanh báo công việc", {
-            body: `${missing.length} người chưa thấy tin nhắn hôm nay: ${missing.map((t) => t.label).join(", ")}`,
+            body: `${missing.length} người chưa báo cáo công việc hôm nay: ${missing.map((t) => t.label).join(", ")}`,
             tag: "nivris-report-reminder-manual",
         });
     }
