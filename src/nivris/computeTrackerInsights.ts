@@ -103,7 +103,10 @@ const PRIORITY_COLORS: TrackerPriorityItem["color"][] = ["blue", "orange", "viol
  * re-querying IndexedDB independently.
  */
 async function findMatches(tracker: NivrisUserTracker, preloaded?: StoredNivrisMessage[]): Promise<StoredNivrisMessage[]> {
-    const sinceTs = startOfToday();
+    // TEMP (revert when asked): widened to include yesterday too, purely so there's something to
+    // test with on a no-message holiday. Only matters when preloaded isn't supplied — the normal
+    // NivrisWorkspace poll already passes its own (matching) widened window in directly.
+    const sinceTs = startOfToday() - 24 * 60 * 60 * 1000;
     const all = preloaded ?? (await getMessagesSince(sinceTs));
 
     // Picked from the entity picker (real userId/roomId) — match exactly instead of by fuzzy name.

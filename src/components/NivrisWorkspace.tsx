@@ -157,8 +157,10 @@ const NivrisWorkspace: React.FC = () => {
     useEffect(() => {
         let cancelled = false;
         const refresh = async (): Promise<void> => {
-            // Shared across every tracker so N trackers cost 1 IndexedDB scan per tick, not N.
-            const todayMessages = await getMessagesSince(startOfToday());
+            // TEMP (revert when asked): widened to include yesterday too, purely so there's
+            // something to test with on a no-message holiday. Shared across every tracker so N
+            // trackers cost 1 IndexedDB scan per tick, not N.
+            const todayMessages = await getMessagesSince(startOfToday() - 24 * 60 * 60 * 1000);
             const entries = await Promise.all(
                 trackers.map(async (t) => [t.id, await computeTrackerMetrics(t, todayMessages)] as const),
             );
