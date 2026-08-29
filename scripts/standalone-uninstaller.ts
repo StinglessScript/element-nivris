@@ -119,8 +119,15 @@ async function main(): Promise<void> {
 
     unregisterHelperService({ log });
 
-    log("XONG. Mở lại Element — về trạng thái gốc, không còn N.I.V.R.I.S.");
-    finish(TITLE, true, "Đã gỡ N.I.V.R.I.S. thành công.\n\nMở lại Element để xác nhận.");
+    // Matches the installer's own wording fix (standalone-installer.ts) — same reasoning: closing
+    // the window isn't quitting Element (Windows often just minimizes it to the system tray), so
+    // reopening it without a full close first can still show the just-removed patch's stale state.
+    log("XONG. Kiểm tra Element đã tắt hẳn chưa (Task Manager, không còn tiến trình 'Element' nào) rồi mở lại — về trạng thái gốc, không còn N.I.V.R.I.S.");
+    finish(
+        TITLE,
+        true,
+        "Đã gỡ N.I.V.R.I.S. thành công.\n\nKiểm tra Element đã tắt hẳn (Task Manager, không còn tiến trình 'Element'), rồi mở lại để xác nhận.",
+    );
 }
 
 main().catch((e) => {
