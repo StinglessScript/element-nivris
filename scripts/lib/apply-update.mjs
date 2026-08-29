@@ -14,7 +14,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import https from "node:https";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { findElementResourcesDirWindows } from "./find-element-windows.mjs";
 
 /** Follows redirects (GitHub's release download URLs 302 to S3) — Node's https module doesn't. */
@@ -425,7 +425,19 @@ export async function quitElementIfRunning(onStatus) {
     return true;
 }
 
-/** Best-effort relaunch after a helper-driven update — the user never touches a terminal for this. */
+/**
+ * Best-effort relaunch after a helper-driven update — the user never touches a terminal for this.
+ *
+ * Windows/Linux launch Element.exe / element-desktop *directly* — unlike macOS's `open -a Element`,
+ * which is a short-lived launcher tool that starts Element and exits itself immediately, these ARE
+ * the long-running app. spawnSync() blocks the calling process until its child exits — confirmed
+ * for real on Windows: clicking "Cập nhật" downloaded and applied the update fine, but the helper
+ * then hung completely unresponsive (every request, not just this one, since Node/Bun is
+ * single-threaded and spawnSync blocks the whole event loop) for as long as Element stayed open,
+ * only ever recovering once the user manually closed it — which looked exactly like "had to
+ * restart Element to make the helper work again," but was actually this same helper process
+ * finally unblocking. Use spawn()+unref() instead: fire the process and don't wait for it.
+ */
 export function relaunchElement() {
     try {
         if (process.platform === "darwin") {
@@ -434,10 +446,10 @@ export function relaunchElement() {
             const resourcesDir = findElementApp({ fail: () => {} });
             if (resourcesDir) {
                 const exe = path.join(path.dirname(resourcesDir), "Element.exe");
-                if (fs.existsSync(exe)) spawnSync(exe, [], { detached: true, stdio: "ignore" });
+                if (fs.existsSync(exe)) spawn(exe, [], { detached: true, stdio: "ignore" }).unref();
             }
         } else if (process.platform === "linux") {
-            spawnSync("element-desktop", [], { detached: true, stdio: "ignore" });
+            spawn("element-desktop", [], { detached: true, stdio: "ignore" }).unref();
         }
     } catch {
         // best-effort — banner still tells the user to reopen Element manually if this silently fails
