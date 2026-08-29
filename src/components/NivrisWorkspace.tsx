@@ -13,6 +13,7 @@ import PopOutIcon from "@vector-im/compound-design-tokens/assets/web/icons/pop-o
 import UserIcon from "@vector-im/compound-design-tokens/assets/web/icons/user";
 import GroupIcon from "@vector-im/compound-design-tokens/assets/web/icons/group";
 import MentionIcon from "@vector-im/compound-design-tokens/assets/web/icons/mention";
+import CheckIcon from "@vector-im/compound-design-tokens/assets/web/icons/check";
 import FavouriteSolidIcon from "@vector-im/compound-design-tokens/assets/web/icons/favourite-solid";
 import BlockIcon from "@vector-im/compound-design-tokens/assets/web/icons/block";
 import DocumentIcon from "@vector-im/compound-design-tokens/assets/web/icons/document";
@@ -49,6 +50,7 @@ import { getMatrixClient } from "../matrixClient";
 import { clearAllMessages, getMessagesByThreadRoot, getMessagesSince, type StoredNivrisMessage } from "../nivris/NivrisMessageDb";
 import NivrisEntityPicker, { type NivrisPickerEntity } from "./NivrisEntityPicker";
 import { getInstalledSha, getUpdateState } from "../nivris/NivrisUpdateChecker";
+import NivrisDoneStore, { NIVRIS_DONE_STORE_CHANGE_EVENT } from "../nivris/NivrisDoneStore";
 
 const TYPE_ICON: Record<NivrisTrackerType, JSX.Element> = {
     boss: <UserIcon width="13px" height="13px" />,
@@ -103,6 +105,8 @@ const NivrisWorkspace: React.FC = () => {
     const [selectedMessage, setSelectedMessage] = useState<StoredNivrisMessage | null>(null);
     const [inspectorTab, setInspectorTab] = useState<"message" | "info" | "chat">("info");
     const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
+    const [feedFilter, setFeedFilter] = useState<"open" | "done">("open");
+    const [doneIds, setDoneIds] = useState<ReadonlySet<string>>(NivrisDoneStore.instance.getAll());
     const [summaryOpen, setSummaryOpen] = useState(false);
     const [chatInput, setChatInput] = useState("");
     const [chatSending, setChatSending] = useState(false);
@@ -122,9 +126,13 @@ const NivrisWorkspace: React.FC = () => {
         const onTasksChange = (): void => setTasks(NivrisTaskStore.instance.getTasksForDate(todayKey()));
         NivrisTaskStore.instance.on(NIVRIS_TASK_STORE_CHANGE_EVENT, onTasksChange);
 
+        const onDoneChange = (): void => setDoneIds(NivrisDoneStore.instance.getAll());
+        NivrisDoneStore.instance.on(NIVRIS_DONE_STORE_CHANGE_EVENT, onDoneChange);
+
         return () => {
             NivrisTrackerStore.instance.off(NIVRIS_TRACKER_STORE_CHANGE_EVENT, onChange);
             NivrisTaskStore.instance.off(NIVRIS_TASK_STORE_CHANGE_EVENT, onTasksChange);
+            NivrisDoneStore.instance.off(NIVRIS_DONE_STORE_CHANGE_EVENT, onDoneChange);
         };
     }, []);
 
@@ -132,6 +140,7 @@ const NivrisWorkspace: React.FC = () => {
         setSelectedMessage(null);
         setInspectorTab("info");
         setSummaryOpen(false);
+        setFeedFilter("open");
     }, [activeId]);
 
     // Recomputed whenever the tracker list changes AND on a short poll, since new messages land in
@@ -168,6 +177,12 @@ const NivrisWorkspace: React.FC = () => {
     }, [activeMetrics]);
 
     const activeFeedGroup = activeMetrics?.feedGroups.find((g) => g.roomId === activeRoomId) ?? null;
+    // "Đã xong" is only meaningful for the mention tracker (an @mention you've handled) — other
+    // tracker types show every match unfiltered, same as before this existed.
+    const isMentionTracker = activeTracker?.type === "mention";
+    const visibleFeedItems = (activeFeedGroup?.items ?? []).filter((p) =>
+        isMentionTracker ? doneIds.has(p.message.id) === (feedFilter === "done") : true,
+    );
 
     const onPickEntity = (entity: NivrisPickerEntity): void => {
         const type: NivrisTrackerType = entity.kind === "user" ? "boss" : "group";
@@ -512,6 +527,22 @@ const NivrisWorkspace: React.FC = () => {
                                                 <div className="mx_NivrisWorkspace_feedEmpty">Chưa có tin nhắn nào khớp với session này.</div>
                                             ) : (
                                                 <>
+                                                    {isMentionTracker && (
+                                                        <div className="mx_NivrisWorkspace_roomTabs">
+                                                            <button
+                                                                className={`mx_NivrisWorkspace_roomTab ${feedFilter === "open" ? "mx_NivrisWorkspace_roomTab_active" : ""}`}
+                                                                onClick={() => setFeedFilter("open")}
+                                                            >
+                                                                Chưa xong
+                                                            </button>
+                                                            <button
+                                                                className={`mx_NivrisWorkspace_roomTab ${feedFilter === "done" ? "mx_NivrisWorkspace_roomTab_active" : ""}`}
+                                                                onClick={() => setFeedFilter("done")}
+                                                            >
+                                                                Đã xong
+                                                            </button>
+                                                        </div>
+                                                    )}
                                                     <div className="mx_NivrisWorkspace_roomTabs">
                                                         {activeMetrics.feedGroups.map((group) => (
                                                             <button
@@ -526,37 +557,52 @@ const NivrisWorkspace: React.FC = () => {
                                                         ))}
                                                     </div>
                                                     <div className="mx_NivrisWorkspace_feedList">
-                                                        {activeFeedGroup?.items.map((p, i) => (
-                                                            <div
-                                                                className={`mx_NivrisWorkspace_feedRow ${p.message.id === selectedMessage?.id ? "mx_NivrisWorkspace_feedRow_active" : ""}`}
-                                                                key={i}
-                                                            >
-                                                                <button
-                                                                    className="mx_NivrisWorkspace_feedRowMain"
-                                                                    onClick={() => {
-                                                                        setSelectedMessage(p.message);
-                                                                        setInspectorTab("message");
-                                                                    }}
+                                                        {visibleFeedItems.length === 0 && isMentionTracker ? (
+                                                            <div className="mx_NivrisWorkspace_feedEmpty">
+                                                                {feedFilter === "done" ? "Chưa đánh dấu tin nào là đã xong." : "Không còn tin nào chưa xong."}
+                                                            </div>
+                                                        ) : (
+                                                            visibleFeedItems.map((p, i) => (
+                                                                <div
+                                                                    className={`mx_NivrisWorkspace_feedRow ${p.message.id === selectedMessage?.id ? "mx_NivrisWorkspace_feedRow_active" : ""}`}
+                                                                    key={i}
                                                                 >
-                                                                    <span className="mx_NivrisWorkspace_feedDot" style={{ backgroundColor: activeFeedGroup.color }} />
-                                                                    <div>
-                                                                        <div className="mx_NivrisWorkspace_feedTitle">{p.title}</div>
-                                                                        <div className="mx_NivrisWorkspace_feedMeta">{p.meta}</div>
-                                                                    </div>
-                                                                </button>
-                                                                <div className="mx_NivrisWorkspace_feedRowActions">
                                                                     <button
-                                                                        className="mx_NivrisWorkspace_feedRowAction"
-                                                                        title="Mở trong Element"
+                                                                        className="mx_NivrisWorkspace_feedRowMain"
                                                                         onClick={() => {
-                                                                            window.location.hash = `#/room/${p.message.roomId}/${p.message.id}`;
+                                                                            setSelectedMessage(p.message);
+                                                                            setInspectorTab("message");
                                                                         }}
                                                                     >
-                                                                        <PopOutIcon width="13px" height="13px" />
+                                                                        <span className="mx_NivrisWorkspace_feedDot" style={{ backgroundColor: activeFeedGroup?.color }} />
+                                                                        <div>
+                                                                            <div className="mx_NivrisWorkspace_feedTitle">{p.title}</div>
+                                                                            <div className="mx_NivrisWorkspace_feedMeta">{p.meta}</div>
+                                                                        </div>
                                                                     </button>
+                                                                    <div className="mx_NivrisWorkspace_feedRowActions">
+                                                                        {isMentionTracker && (
+                                                                            <button
+                                                                                className={`mx_NivrisWorkspace_feedRowAction ${doneIds.has(p.message.id) ? "mx_NivrisWorkspace_feedRowAction_active" : ""}`}
+                                                                                title={doneIds.has(p.message.id) ? "Bỏ đánh dấu đã xong" : "Đánh dấu đã xong"}
+                                                                                onClick={() => NivrisDoneStore.instance.setDone(p.message.id, !doneIds.has(p.message.id))}
+                                                                            >
+                                                                                <CheckIcon width="13px" height="13px" />
+                                                                            </button>
+                                                                        )}
+                                                                        <button
+                                                                            className="mx_NivrisWorkspace_feedRowAction"
+                                                                            title="Mở trong Element"
+                                                                            onClick={() => {
+                                                                                window.location.hash = `#/room/${p.message.roomId}/${p.message.id}`;
+                                                                            }}
+                                                                        >
+                                                                            <PopOutIcon width="13px" height="13px" />
+                                                                        </button>
+                                                                    </div>
                                                                 </div>
-                                                            </div>
-                                                        ))}
+                                                            ))
+                                                        )}
                                                     </div>
                                                 </>
                                             )}

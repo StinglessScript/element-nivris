@@ -680,6 +680,8 @@ body[class*="cpd-theme-dark"] {
     cursor: pointer;
 }
 .mx_NivrisWorkspace_feedRowAction:hover { background-color: rgb(var(--jv-teal-rgb) / 14%); color: var(--jv-teal); }
+.mx_NivrisWorkspace_feedRowAction_active { background-color: var(--jv-teal-solid); color: #fff; }
+.mx_NivrisWorkspace_feedRowAction_active:hover { background-color: var(--jv-teal-solid); color: #fff; }
 .mx_NivrisWorkspace_feedDot { width: 8px; height: 8px; border-radius: 100%; margin-top: 5px; flex-shrink: 0; }
 .mx_NivrisWorkspace_feedTitle { font: 500 12.5px var(--jv-sans); color: var(--jv-ink); line-height: 1.4; }
 .mx_NivrisWorkspace_feedMeta { margin-top: 3px; font: 400 9.5px var(--jv-mono); color: var(--jv-label); }
