@@ -1168,3 +1168,16 @@ body[class*="cpd-theme-dark"] {
     cursor: pointer;
 }
 .mx_NivrisUpdateBanner_btn:hover { background-color: #086361; }
+.mx_NivrisUpdateBanner_dismiss {
+    flex-shrink: 0;
+    width: 22px;
+    height: 22px;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--jv-muted);
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+}
+.mx_NivrisUpdateBanner_dismiss:hover { background-color: var(--jv-border-strong); color: var(--jv-ink); }

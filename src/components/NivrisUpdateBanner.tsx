@@ -97,6 +97,11 @@ const NivrisUpdateBanner: React.FC = () => {
 
     if (view.phase === "hidden") return null;
 
+    // Dismissing doesn't touch the underlying cached check — it just hides this one popup. The
+    // next natural re-check (SHA change, throttle window, or a manual "Kiểm tra cập nhật ngay")
+    // brings it back if the thing being reported is still true, same as before this existed.
+    const onDismiss = (): void => setView({ phase: "hidden" });
+
     return (
         <div className="mx_NivrisUpdateBanner">
             {view.phase === "prompt" && (
@@ -106,6 +111,9 @@ const NivrisUpdateBanner: React.FC = () => {
                     </span>
                     <button className="mx_NivrisUpdateBanner_btn" onClick={onUpdate}>
                         {view.kind === "new-version" ? "Cập nhật" : "Cài lại"}
+                    </button>
+                    <button className="mx_NivrisUpdateBanner_dismiss" onClick={onDismiss} aria-label="Để sau" title="Để sau">
+                        ×
                     </button>
                 </>
             )}
@@ -130,6 +138,9 @@ const NivrisUpdateBanner: React.FC = () => {
                     })()}
                     <button className="mx_NivrisUpdateBanner_btn" onClick={onUpdate}>
                         Thử lại
+                    </button>
+                    <button className="mx_NivrisUpdateBanner_dismiss" onClick={onDismiss} aria-label="Đóng" title="Đóng">
+                        ×
                     </button>
                 </>
             )}
