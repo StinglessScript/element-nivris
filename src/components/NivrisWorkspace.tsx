@@ -52,6 +52,20 @@ import { clearAllMessages, getMessagesByThreadRoot, getMessagesSince, type Store
 import NivrisEntityPicker, { type NivrisPickerEntity } from "./NivrisEntityPicker";
 import { getInstalledSha, getUpdateState } from "../nivris/NivrisUpdateChecker";
 import NivrisDoneStore, { NIVRIS_DONE_STORE_CHANGE_EVENT } from "../nivris/NivrisDoneStore";
+import { getModuleApi } from "../nivris/moduleApi";
+
+/**
+ * Jumps to a specific message in Element's own room view. Not a raw `window.location.hash` write
+ * (what this used to do) — the Nivris workspace panel is mounted through Element's own space/
+ * location router (registerLocationRenderer, see index.tsx), which has no visibility into a plain
+ * hash change; leaving the "nivris" space active in Element's internal state while the hash points
+ * at a room desyncs the two, and reported live as needing to switch spaces away and back twice to
+ * recover. `toMatrixToLink` goes through the module API's own navigation, which keeps that state
+ * in sync as part of leaving the module's space, same as clicking a real permalink would.
+ */
+function openMessageInElement(roomId: string, eventId: string): void {
+    void getModuleApi().navigation.toMatrixToLink(`https://matrix.to/#/${roomId}/${eventId}`);
+}
 
 const TYPE_ICON: Record<NivrisTrackerType, JSX.Element> = {
     boss: <UserIcon width="13px" height="13px" />,
@@ -603,9 +617,7 @@ const NivrisWorkspace: React.FC = () => {
                                                                         <button
                                                                             className="mx_NivrisWorkspace_feedRowAction"
                                                                             title="Mở trong Element"
-                                                                            onClick={() => {
-                                                                                window.location.hash = `#/room/${p.message.roomId}/${p.message.id}`;
-                                                                            }}
+                                                                            onClick={() => openMessageInElement(p.message.roomId, p.message.id)}
                                                                         >
                                                                             <PopOutIcon width="13px" height="13px" />
                                                                         </button>
@@ -949,9 +961,7 @@ const SessionInspector: React.FC<{
                         <div className="mx_NivrisWorkspace_inspectorFoot">
                             <button
                                 className="mx_NivrisWorkspace_inspectorPrimary"
-                                onClick={() => {
-                                    window.location.hash = `#/room/${message.roomId}/${message.id}`;
-                                }}
+                                onClick={() => openMessageInElement(message.roomId, message.id)}
                             >
                                 MỞ TRONG ELEMENT
                             </button>

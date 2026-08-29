@@ -12,6 +12,7 @@ import type { Module, Api, ModuleFactory } from "@element-hq/element-web-module-
 import NivrisWorkspace from "./components/NivrisWorkspace";
 import NivrisUpdateBanner from "./components/NivrisUpdateBanner";
 import { startThreadPanelIconInjector } from "./nivris/threadPanelInjector";
+import { setModuleApi } from "./nivris/moduleApi";
 import style from "./style.css" with { type: "css" };
 
 const LOCATION_PATH = "nivris";
@@ -24,6 +25,7 @@ class NivrisModule implements Module {
 
     public async load(): Promise<void> {
         document.adoptedStyleSheets.push(style);
+        setModuleApi(this.api);
 
         this.api.navigation.registerLocationRenderer(LOCATION_PATH, () => <NivrisWorkspace />);
 
