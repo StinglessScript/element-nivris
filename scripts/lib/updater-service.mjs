@@ -107,6 +107,10 @@ ${argElements}
     <dict>
         <key>SuccessfulExit</key><false/>
     </dict>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>NIVRIS_HELPER_DIR</key><string>${helperDir}</string>
+    </dict>
     <key>StandardOutPath</key><string>${path.join(helperDir, "helper.log")}</string>
     <key>StandardErrorPath</key><string>${path.join(helperDir, "helper.log")}</string>
 </dict>
@@ -138,7 +142,12 @@ ${argElements}
         const cmdPath = path.join(helperDir, "run-helper.cmd");
         const logPath = path.join(helperDir, "helper.log");
         const cmdLine = [execPath, ...args].map((a) => `"${a}"`).join(" ");
-        fs.writeFileSync(cmdPath, `@echo off\r\n${cmdLine} >> "${logPath}" 2>&1\r\n`);
+        // NIVRIS_HELPER_DIR: see nivris-update-helper.mjs's doc comment on helperDir — inside a
+        // bun build --compile'd Windows binary, neither import.meta.url nor process.execPath
+        // reliably resolve to this real directory (both were empirically confirmed, from actual
+        // crash logs, to report Bun's virtual $bunfs path instead), so tell it directly instead of
+        // making it guess.
+        fs.writeFileSync(cmdPath, `@echo off\r\nset "NIVRIS_HELPER_DIR=${helperDir}"\r\n${cmdLine} >> "${logPath}" 2>&1\r\n`);
 
         const vbsPath = path.join(helperDir, "run-hidden.vbs");
         // The only thing shell.Run needs quoted here is this one .cmd path (may contain spaces,
@@ -187,6 +196,7 @@ ${argElements}
 Description=Nivris update helper
 
 [Service]
+Environment=NIVRIS_HELPER_DIR=${helperDir}
 ExecStart=${[execPath, ...args].join(" ")}
 Restart=on-failure
 
