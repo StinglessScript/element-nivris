@@ -206,8 +206,13 @@ export async function computeTrackerMetrics(tracker: NivrisUserTracker, preloade
         const countPrefix = msgsDesc.length > 1 ? `${msgsDesc.length} tin • ` : "";
         return {
             color: PRIORITY_COLORS[0],
-            title: `Thread: ${root.senderName}: ${truncate(root.body, 100)}`,
-            meta: `${countPrefix}${relativeTime(latest.ts)}${roomSuffix}`,
+            // The newest reply is the title now, not the thread's original opening message —
+            // reported live: what's actually new in a thread was buried behind the expand click,
+            // since the summary row used to always show the (often long-stale) root message
+            // instead of whatever just happened. The root is still there, just demoted to context
+            // in meta rather than hiding the new content entirely.
+            title: `${latest.senderName}: ${truncate(latest.body, 100)}`,
+            meta: `${countPrefix}${relativeTime(latest.ts)}${roomSuffix} • Thread: "${truncate(root.body, 30)}"`,
             message: latest,
             threadMessages: msgsDesc.length > 1 ? msgsDesc : undefined,
         };
