@@ -703,7 +703,6 @@ body[class*="cpd-theme-dark"] {
     gap: 6px;
     padding: 3px 5px 3px 9px;
     border: 1px solid var(--jv-border);
-    border-left: 2px solid var(--jv-border-strong);
     border-radius: 5px;
     background-color: var(--jv-surface-alt);
 }
