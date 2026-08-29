@@ -38,6 +38,7 @@ import {
     summarizeThread,
     type HomeOverview,
     type TrackerMetrics,
+    type TrackerPriorityItem,
 } from "../nivris/computeTrackerInsights";
 import NivrisTaskStore, {
     NIVRIS_TASK_STORE_CHANGE_EVENT,
@@ -182,9 +183,14 @@ const NivrisWorkspace: React.FC = () => {
     // "Đã xong" is only meaningful for the mention tracker (an @mention you've handled) — other
     // tracker types show every match unfiltered, same as before this existed.
     const isMentionTracker = activeTracker?.type === "mention";
-    const visibleFeedItems = (activeFeedGroup?.items ?? []).filter((p) =>
-        isMentionTracker ? doneIds.has(p.message.id) === (feedFilter === "done") : true,
-    );
+    const matchesFeedFilter = (p: TrackerPriorityItem): boolean => (isMentionTracker ? doneIds.has(p.message.id) === (feedFilter === "done") : true);
+    const visibleFeedItems = (activeFeedGroup?.items ?? []).filter(matchesFeedFilter);
+    // Room tabs (count + which rooms even show up) reflect the current Chưa xong/Đã xong filter —
+    // reported live: a room tab kept showing its total count even after every @mention in it got
+    // marked done, and stayed visible with nothing left to act on there.
+    const visibleFeedGroups = (activeMetrics?.feedGroups ?? [])
+        .map((g) => ({ ...g, items: g.items.filter(matchesFeedFilter) }))
+        .filter((g) => g.items.length > 0);
 
     const onPickEntity = (entity: NivrisPickerEntity): void => {
         const type: NivrisTrackerType = entity.kind === "user" ? "boss" : "group";
@@ -547,9 +553,9 @@ const NivrisWorkspace: React.FC = () => {
                                                 <div className="mx_NivrisWorkspace_feedEmpty">Chưa có tin nhắn nào khớp với session này.</div>
                                             ) : (
                                                 <>
-                                                    {activeMetrics.feedGroups.length > 1 && (
+                                                    {visibleFeedGroups.length > 1 && (
                                                         <div className="mx_NivrisWorkspace_roomTabs">
-                                                            {activeMetrics.feedGroups.map((group) => (
+                                                            {visibleFeedGroups.map((group) => (
                                                                 <button
                                                                     key={group.roomId}
                                                                     className={`mx_NivrisWorkspace_roomTab ${group.roomId === activeRoomId ? "mx_NivrisWorkspace_roomTab_active" : ""}`}
