@@ -42,15 +42,23 @@ import {
 // helper-config.json. When run as a `bun build --compile`d standalone binary instead (the
 // standalone-installer.ts path), import.meta.url points at a virtual in-bundle path that doesn't
 // exist on the real filesystem — the config file actually sits next to the compiled executable
-// itself, i.e. process.execPath's directory, instead. That virtual path's format is NOT the same
-// across platforms — macOS/Linux use `file:///$bunfs/root/...`, but Windows uses a fake drive
-// letter instead (`B:\~BUN\root\...`, confirmed from a real crash log: a Windows install kept
-// trying to load config from that literal path). Checking for the string "$bunfs" alone silently
-// mis-detected "real file" on Windows and pointed at a directory that doesn't exist. Check reality
-// instead of guessing at Bun's per-platform virtual-path spelling: a real script file's directory
-// exists on disk; a virtual bunfs one never does, on any platform.
+// itself, i.e. process.execPath's directory, instead.
+//
+// Two earlier attempts at this check both failed on Windows, confirmed from real crash logs on an
+// actual Windows install:
+//   1. Checking import.meta.url for the literal string "$bunfs" — that's the virtual path's format
+//      on macOS/Linux, but Windows uses a fake drive letter instead (`B:\~BUN\root\...`), so the
+//      check silently picked the wrong branch there.
+//   2. Checking fs.existsSync() on that virtual directory, assuming a virtual path can never exist
+//      on the real filesystem — wrong specifically on Windows, where Bun mounts $bunfs as an actual
+//      fake drive that existsSync happily reports as real.
+// Stop trying to classify the path at all — just check for the one file actually being sought.
+// helper-config.json is never embedded at compile time (it's per-machine, generated at install
+// time), so it can only ever be found in the real directory, whichever candidate that turns out to
+// be, on every platform and Bun version.
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
-const helperDir = fs.existsSync(scriptDir) ? scriptDir : path.dirname(process.execPath);
+const execDir = path.dirname(process.execPath);
+const helperDir = fs.existsSync(path.join(scriptDir, "helper-config.json")) ? scriptDir : execDir;
 const configPath = path.join(helperDir, "helper-config.json");
 
 function log(msg) {
