@@ -71,6 +71,12 @@ $timer.Add_Tick({
 $timer.Start()
 $form.Add_Shown({ $form.Activate() })
 [System.Windows.Forms.Application]::Run($form)
+
+# This script and its status file live in a per-run temp dir (see startProgress() below) that
+# nothing else ever cleans up — the installer process that created it is long gone by the time the
+# user dismisses the MessageBox above, so this detached script is the only thing left that still
+# knows its own directory and the right moment (after the dialog closes, not before) to remove it.
+Remove-Item -Recurse -Force -ErrorAction SilentlyContinue (Split-Path $StatusFile -Parent)
 `;
 
 function writeStatus(s: Status): void {
