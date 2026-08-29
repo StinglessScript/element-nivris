@@ -14,8 +14,6 @@ import UserIcon from "@vector-im/compound-design-tokens/assets/web/icons/user";
 import GroupIcon from "@vector-im/compound-design-tokens/assets/web/icons/group";
 import MentionIcon from "@vector-im/compound-design-tokens/assets/web/icons/mention";
 import CheckIcon from "@vector-im/compound-design-tokens/assets/web/icons/check";
-import ChevronRightIcon from "@vector-im/compound-design-tokens/assets/web/icons/chevron-right";
-import ChevronDownIcon from "@vector-im/compound-design-tokens/assets/web/icons/chevron-down";
 import FavouriteSolidIcon from "@vector-im/compound-design-tokens/assets/web/icons/favourite-solid";
 import BlockIcon from "@vector-im/compound-design-tokens/assets/web/icons/block";
 import DocumentIcon from "@vector-im/compound-design-tokens/assets/web/icons/document";
@@ -37,7 +35,6 @@ import {
     extractTasksForTracker,
     generateDailyReport,
     generateTrackerInsights,
-    relativeTime,
     summarizeThread,
     type HomeOverview,
     type TrackerMetrics,
@@ -109,10 +106,6 @@ const NivrisWorkspace: React.FC = () => {
     const [inspectorTab, setInspectorTab] = useState<"message" | "info" | "chat">("info");
     const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
     const [feedFilter, setFeedFilter] = useState<"open" | "done">("open");
-    // Threads default open (empty = nothing collapsed) — reported live: entering a session and
-    // having to click every thread open to see what's new was the wrong default. Tracks which
-    // threads were explicitly collapsed instead of which were explicitly opened.
-    const [collapsedThreads, setCollapsedThreads] = useState<Set<string>>(new Set());
     const [doneIds, setDoneIds] = useState<ReadonlySet<string>>(NivrisDoneStore.instance.getAll());
     const [summaryOpen, setSummaryOpen] = useState(false);
     const [chatInput, setChatInput] = useState("");
@@ -148,7 +141,6 @@ const NivrisWorkspace: React.FC = () => {
         setInspectorTab("info");
         setSummaryOpen(false);
         setFeedFilter("open");
-        setCollapsedThreads(new Set());
     }, [activeId]);
 
     // Recomputed whenever the tracker list changes AND on a short poll, since new messages land in
@@ -576,103 +568,46 @@ const NivrisWorkspace: React.FC = () => {
                                                                 {feedFilter === "done" ? "Chưa đánh dấu tin nào là đã xong." : "Không còn tin nào chưa xong."}
                                                             </div>
                                                         ) : (
-                                                            visibleFeedItems.map((p, i) => {
-                                                                const threadKey = p.threadMessages ? (p.message.threadRootId ?? p.message.id) : null;
-                                                                const isExpanded = !!threadKey && !collapsedThreads.has(threadKey);
-                                                                return (
-                                                                    <div key={i}>
-                                                                        <div
-                                                                            className={`mx_NivrisWorkspace_feedRow ${p.message.id === selectedMessage?.id ? "mx_NivrisWorkspace_feedRow_active" : ""}`}
-                                                                        >
-                                                                            {threadKey && (
-                                                                                <button
-                                                                                    className="mx_NivrisWorkspace_feedExpandBtn"
-                                                                                    title={isExpanded ? "Thu gọn" : `Xem ${p.threadMessages?.length} tin trong thread`}
-                                                                                    onClick={() =>
-                                                                                        setCollapsedThreads((prev) => {
-                                                                                            const next = new Set(prev);
-                                                                                            if (next.has(threadKey)) next.delete(threadKey);
-                                                                                            else next.add(threadKey);
-                                                                                            return next;
-                                                                                        })
-                                                                                    }
-                                                                                >
-                                                                                    {isExpanded ? <ChevronDownIcon width="13px" height="13px" /> : <ChevronRightIcon width="13px" height="13px" />}
-                                                                                </button>
-                                                                            )}
-                                                                            <button
-                                                                                className="mx_NivrisWorkspace_feedRowMain"
-                                                                                onClick={() => {
-                                                                                    setSelectedMessage(p.message);
-                                                                                    setInspectorTab("message");
-                                                                                }}
-                                                                            >
-                                                                                <span className="mx_NivrisWorkspace_feedDot" style={{ backgroundColor: activeFeedGroup?.color }} />
-                                                                                <div>
-                                                                                    <div className="mx_NivrisWorkspace_feedTitle">{p.title}</div>
-                                                                                    <div className="mx_NivrisWorkspace_feedMeta">{p.meta}</div>
-                                                                                </div>
-                                                                            </button>
-                                                                            <div className="mx_NivrisWorkspace_feedRowActions">
-                                                                                {isMentionTracker && (
-                                                                                    <button
-                                                                                        className={`mx_NivrisWorkspace_feedRowAction ${doneIds.has(p.message.id) ? "mx_NivrisWorkspace_feedRowAction_active" : ""}`}
-                                                                                        title={doneIds.has(p.message.id) ? "Bỏ đánh dấu đã xong" : "Đánh dấu đã xong"}
-                                                                                        onClick={() => NivrisDoneStore.instance.setDone(p.message.id, !doneIds.has(p.message.id))}
-                                                                                    >
-                                                                                        <CheckIcon width="13px" height="13px" />
-                                                                                    </button>
-                                                                                )}
-                                                                                <button
-                                                                                    className="mx_NivrisWorkspace_feedRowAction"
-                                                                                    title="Mở trong Element"
-                                                                                    onClick={() => {
-                                                                                        window.location.hash = `#/room/${p.message.roomId}/${p.message.id}`;
-                                                                                    }}
-                                                                                >
-                                                                                    <PopOutIcon width="13px" height="13px" />
-                                                                                </button>
-                                                                            </div>
+                                                            visibleFeedItems.map((p, i) => (
+                                                                <div
+                                                                    className={`mx_NivrisWorkspace_feedRow ${p.message.id === selectedMessage?.id ? "mx_NivrisWorkspace_feedRow_active" : ""}`}
+                                                                    key={i}
+                                                                >
+                                                                    <button
+                                                                        className="mx_NivrisWorkspace_feedRowMain"
+                                                                        onClick={() => {
+                                                                            setSelectedMessage(p.message);
+                                                                            setInspectorTab("message");
+                                                                        }}
+                                                                    >
+                                                                        <span className="mx_NivrisWorkspace_feedDot" style={{ backgroundColor: activeFeedGroup?.color }} />
+                                                                        <div>
+                                                                            <div className="mx_NivrisWorkspace_feedTitle">{p.title}</div>
+                                                                            <div className="mx_NivrisWorkspace_feedMeta">{p.meta}</div>
                                                                         </div>
-                                                                        {isExpanded && p.threadMessages && (
-                                                                            <div className="mx_NivrisWorkspace_feedSubList">
-                                                                                {p.threadMessages.map((tm) => (
-                                                                                    <div
-                                                                                        className={`mx_NivrisWorkspace_feedSubRow ${tm.id === selectedMessage?.id ? "mx_NivrisWorkspace_feedRow_active" : ""}`}
-                                                                                        key={tm.id}
-                                                                                    >
-                                                                                        <button
-                                                                                            className="mx_NivrisWorkspace_feedRowMain"
-                                                                                            onClick={() => {
-                                                                                                setSelectedMessage(tm);
-                                                                                                setInspectorTab("message");
-                                                                                            }}
-                                                                                        >
-                                                                                            <div>
-                                                                                                <div className="mx_NivrisWorkspace_feedTitle">
-                                                                                                    {tm.senderName}: {tm.body.length > 100 ? `${tm.body.slice(0, 100)}…` : tm.body}
-                                                                                                </div>
-                                                                                                <div className="mx_NivrisWorkspace_feedMeta">{relativeTime(tm.ts)}</div>
-                                                                                            </div>
-                                                                                        </button>
-                                                                                        <div className="mx_NivrisWorkspace_feedRowActions">
-                                                                                            <button
-                                                                                                className="mx_NivrisWorkspace_feedRowAction"
-                                                                                                title="Mở trong Element"
-                                                                                                onClick={() => {
-                                                                                                    window.location.hash = `#/room/${tm.roomId}/${tm.id}`;
-                                                                                                }}
-                                                                                            >
-                                                                                                <PopOutIcon width="13px" height="13px" />
-                                                                                            </button>
-                                                                                        </div>
-                                                                                    </div>
-                                                                                ))}
-                                                                            </div>
+                                                                    </button>
+                                                                    <div className="mx_NivrisWorkspace_feedRowActions">
+                                                                        {isMentionTracker && (
+                                                                            <button
+                                                                                className={`mx_NivrisWorkspace_feedRowAction ${doneIds.has(p.message.id) ? "mx_NivrisWorkspace_feedRowAction_active" : ""}`}
+                                                                                title={doneIds.has(p.message.id) ? "Bỏ đánh dấu đã xong" : "Đánh dấu đã xong"}
+                                                                                onClick={() => NivrisDoneStore.instance.setDone(p.message.id, !doneIds.has(p.message.id))}
+                                                                            >
+                                                                                <CheckIcon width="13px" height="13px" />
+                                                                            </button>
                                                                         )}
+                                                                        <button
+                                                                            className="mx_NivrisWorkspace_feedRowAction"
+                                                                            title="Mở trong Element"
+                                                                            onClick={() => {
+                                                                                window.location.hash = `#/room/${p.message.roomId}/${p.message.id}`;
+                                                                            }}
+                                                                        >
+                                                                            <PopOutIcon width="13px" height="13px" />
+                                                                        </button>
                                                                     </div>
-                                                                );
-                                                            })
+                                                                </div>
+                                                            ))
                                                         )}
                                                     </div>
                                                 </>

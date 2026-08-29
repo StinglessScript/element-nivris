@@ -679,35 +679,6 @@ body[class*="cpd-theme-dark"] {
 .mx_NivrisWorkspace_feedRow:hover { border-color: var(--jv-border-strong); background-color: var(--jv-teal-wash); }
 .mx_NivrisWorkspace_feedRow_active { border-color: var(--jv-teal); background-color: rgb(var(--jv-teal-rgb) / 8%); }
 
-.mx_NivrisWorkspace_feedExpandBtn {
-    flex-shrink: 0;
-    width: 20px;
-    height: 20px;
-    border: none;
-    border-radius: 4px;
-    background: none;
-    color: var(--jv-muted);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-}
-.mx_NivrisWorkspace_feedExpandBtn:hover { background-color: rgb(var(--jv-teal-rgb) / 14%); color: var(--jv-teal); }
-
-/* Individual messages inside an expanded thread group — indented under the summary row so they
-   read as "belongs to the thread above" rather than more top-level items. */
-.mx_NivrisWorkspace_feedSubList { display: flex; flex-direction: column; gap: 6px; margin: 6px 0 0 27px; }
-.mx_NivrisWorkspace_feedSubRow {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 3px 5px 3px 9px;
-    border: 1px solid var(--jv-border);
-    border-radius: 5px;
-    background-color: var(--jv-surface-alt);
-}
-.mx_NivrisWorkspace_feedSubRow:hover { background-color: var(--jv-teal-wash); }
-
 .mx_NivrisWorkspace_feedRowMain {
     appearance: none;
     flex: 1;

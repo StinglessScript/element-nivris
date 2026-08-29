@@ -36,10 +36,6 @@ export interface TrackerPriorityItem {
     title: string;
     meta: string;
     message: StoredNivrisMessage;
-    /** Set only for a grouped thread row (2+ matched messages sharing a thread) — the individual
-     * messages the summary row collapsed, newest first, so the UI can offer an expand affordance
-     * instead of just losing them. Undefined for a single-message row. */
-    threadMessages?: StoredNivrisMessage[];
 }
 
 export interface TrackerTeamWeight {
@@ -81,7 +77,7 @@ const EMPTY_METRICS: TrackerMetrics = {
 
 const ROOM_COLORS = ["#0fa3a0", "#c97a22", "#6c5cff", "#2ba95f", "#de3f52"];
 
-export function relativeTime(ts: number): string {
+function relativeTime(ts: number): string {
     const diffMs = Date.now() - ts;
     const mins = Math.round(diffMs / 60000);
     if (mins < 1) return "vừa xong";
@@ -177,14 +173,12 @@ export async function computeTrackerMetrics(tracker: NivrisUserTracker, preloade
     const showRoomName = byRoom.size <= 1;
     const truncate = (s: string, n: number): string => (s.length > n ? `${s.slice(0, n)}…` : s);
 
-    // A thread's own first message ("root") is a much better label for the group than "trong
-    // thread" (which doesn't say *which* thread) or than repeating every individual reply as its
-    // own flat row (reported live — a busy thread buried the feed under near-duplicate entries).
-    // Root ids are deduped and fetched once, not once per message, since several matches commonly
-    // share one thread. Only trackers other than "mention" get grouped: an @mention needs to stay
-    // individually markable "Đã xong" (see NivrisWorkspace.tsx), which collapsing several into one
-    // row would break.
-    const groupByThread = tracker.type !== "mention";
+    // "trong thread" alone doesn't say *which* thread — show the thread's own first message as a
+    // short preview instead, so you can tell threads apart without opening each one. Root ids are
+    // deduped and fetched once (not per-message) since several matches commonly share one thread.
+    // Grouping/collapsing several replies into one row was tried and reverted (reported live as
+    // "rối mắt" — visually cluttered): flat, one row per message, with the thread label on each,
+    // is what stuck.
     const threadRootIds = Array.from(new Set(matches.map((m) => m.threadRootId).filter((id): id is string => !!id)));
     const threadRoots = new Map<string, StoredNivrisMessage>();
     if (threadRootIds.length) {
@@ -194,55 +188,28 @@ export async function computeTrackerMetrics(tracker: NivrisUserTracker, preloade
         });
     }
 
-    function buildItem(msgsDesc: StoredNivrisMessage[]): TrackerPriorityItem {
-        const latest = msgsDesc[0];
-        const roomSuffix = showRoomName ? ` • ${latest.roomName}` : "";
-        if (!latest.threadRootId || !groupByThread) {
-            return {
-                color: PRIORITY_COLORS[0],
-                title: `${latest.senderName}: ${truncate(latest.body, 100)}`,
-                meta: `${relativeTime(latest.ts)}${roomSuffix}${latest.threadRootId ? ` • Thread: "${truncate((threadRoots.get(latest.threadRootId) ?? latest).body, 40)}"` : ""}`,
-                message: latest,
-            };
-        }
-        const root = threadRoots.get(latest.threadRootId) ?? latest;
-        const countPrefix = msgsDesc.length > 1 ? `${msgsDesc.length} tin • ` : "";
+    function buildItem(m: StoredNivrisMessage): TrackerPriorityItem {
+        const roomSuffix = showRoomName ? ` • ${m.roomName}` : "";
+        const threadSuffix = m.threadRootId ? ` • Thread: "${truncate((threadRoots.get(m.threadRootId) ?? m).body, 40)}"` : "";
         return {
             color: PRIORITY_COLORS[0],
-            // The newest reply is the title now, not the thread's original opening message —
-            // reported live: what's actually new in a thread was buried behind the expand click,
-            // since the summary row used to always show the (often long-stale) root message
-            // instead of whatever just happened. The root is still there, just demoted to context
-            // in meta rather than hiding the new content entirely.
-            title: `${latest.senderName}: ${truncate(latest.body, 100)}`,
-            meta: `${countPrefix}${relativeTime(latest.ts)}${roomSuffix} • Thread: "${truncate(root.body, 30)}"`,
-            message: latest,
-            threadMessages: msgsDesc.length > 1 ? msgsDesc : undefined,
+            title: `${m.senderName}: ${truncate(m.body, 100)}`,
+            meta: `${relativeTime(m.ts)}${roomSuffix}${threadSuffix}`,
+            message: m,
         };
     }
 
     const feedGroups: TrackerFeedGroup[] = Array.from(byRoom.entries())
         .sort((a, b) => Math.max(...b[1].map((m) => m.ts)) - Math.max(...a[1].map((m) => m.ts)))
-        .map(([roomId, roomMatches], i) => {
-            const sorted = [...roomMatches].sort((a, b) => b.ts - a.ts);
-            let items: TrackerPriorityItem[];
-            if (groupByThread) {
-                const byThread = new Map<string, StoredNivrisMessage[]>();
-                for (const m of sorted) {
-                    const key = m.threadRootId ?? m.id;
-                    const list = byThread.get(key) ?? [];
-                    list.push(m);
-                    byThread.set(key, list);
-                }
-                items = Array.from(byThread.values())
-                    .sort((a, b) => b[0].ts - a[0].ts)
-                    .slice(0, MAX_ITEMS_PER_ROOM)
-                    .map(buildItem);
-            } else {
-                items = sorted.slice(0, MAX_ITEMS_PER_ROOM).map((m) => buildItem([m]));
-            }
-            return { roomId, roomName: roomMatches[0].roomName, color: ROOM_COLORS[i % ROOM_COLORS.length], items };
-        });
+        .map(([roomId, roomMatches], i) => ({
+            roomId,
+            roomName: roomMatches[0].roomName,
+            color: ROOM_COLORS[i % ROOM_COLORS.length],
+            items: [...roomMatches]
+                .sort((a, b) => b.ts - a.ts)
+                .slice(0, MAX_ITEMS_PER_ROOM)
+                .map(buildItem),
+        }));
 
     return {
         matches,
