@@ -52,9 +52,27 @@ function authHeaders(): Record<string, string> {
     return { "X-Nivris-Token": __NIVRIS_UPDATE_TOKEN__ };
 }
 
+const FETCH_TIMEOUT_MS = 8000;
+
+/** Plain fetch() never times out on its own — if the helper is up but wedged (seen for real right
+ * after a Windows self-update: Element relaunches, the renderer starts polling immediately, and
+ * something in that window leaves the request just hanging with no response), every caller here
+ * awaiting it directly would hang forever too, which is exactly what "Đang kiểm tra..." getting
+ * stuck meant — a `finally` block never runs on a promise that never settles. AbortController gives
+ * every one of these calls a hard ceiling so the UI always recovers into some real state. */
+async function fetchWithTimeout(url: string, init?: RequestInit): Promise<Response> {
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    try {
+        return await fetch(url, { ...init, signal: controller.signal });
+    } finally {
+        window.clearTimeout(timer);
+    }
+}
+
 async function fetchHelperStatus(): Promise<HelperStatus | null> {
     try {
-        const res = await fetch(`${HELPER_BASE}/status`, { headers: authHeaders() });
+        const res = await fetchWithTimeout(`${HELPER_BASE}/status`, { headers: authHeaders() });
         if (!res.ok) return null;
         return (await res.json()) as HelperStatus;
     } catch {
@@ -71,7 +89,7 @@ async function fetchLatestSha(): Promise<string | null> {
         // "access-control-allow-origin: *" on its public GET endpoints, so use that instead just
         // for the version check; the helper's actual download (plain Node https, not subject to
         // CORS) is unaffected and keeps using the release asset.
-        const res = await fetch(`https://api.github.com/repos/${REPO}/commits/main`);
+        const res = await fetchWithTimeout(`https://api.github.com/repos/${REPO}/commits/main`);
         if (!res.ok) return null;
         const data = (await res.json()) as { sha?: unknown };
         return typeof data.sha === "string" ? data.sha : null;
@@ -153,12 +171,17 @@ export async function getInstalledSha(): Promise<string | null> {
 }
 
 export async function triggerUpdate(): Promise<void> {
-    await fetch(`${HELPER_BASE}/update`, { method: "POST", headers: authHeaders() });
+    try {
+        await fetchWithTimeout(`${HELPER_BASE}/update`, { method: "POST", headers: authHeaders() });
+    } catch {
+        // best-effort kickoff — the caller's progress poll (fetchUpdateProgress) is what actually
+        // drives the UI, and it fails closed (null) on its own if nothing ever started
+    }
 }
 
 export async function fetchUpdateProgress(): Promise<UpdateProgress | null> {
     try {
-        const res = await fetch(`${HELPER_BASE}/update/progress`, { headers: authHeaders() });
+        const res = await fetchWithTimeout(`${HELPER_BASE}/update/progress`, { headers: authHeaders() });
         if (!res.ok) return null;
         return (await res.json()) as UpdateProgress;
     } catch {

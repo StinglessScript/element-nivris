@@ -47,6 +47,7 @@ function toView(state: NivrisUpdateState): ViewState {
 const NivrisUpdateBanner: React.FC = () => {
     const [view, setView] = useState<ViewState>({ phase: "hidden" });
     const pollRef = useRef<number | undefined>(undefined);
+    const doneRecheckRef = useRef<number | undefined>(undefined);
 
     useEffect(() => {
         void getUpdateState().then((state) => setView(toView(state)));
@@ -59,6 +60,7 @@ const NivrisUpdateBanner: React.FC = () => {
         });
         return () => {
             window.clearInterval(pollRef.current);
+            window.clearTimeout(doneRecheckRef.current);
             unsubscribe();
         };
     }, []);
@@ -73,6 +75,17 @@ const NivrisUpdateBanner: React.FC = () => {
                 window.clearInterval(pollRef.current);
                 if (progress.ok) {
                     setView({ phase: "updating", progress });
+                    // A successful update quits and relaunches Element — this renderer is normally
+                    // dead within a couple seconds, so nothing after this point usually even runs.
+                    // But if that relaunch races or silently no-ops (seen for real: the helper
+                    // reported done/ok while the old renderer just sat here forever on "Xong!"),
+                    // this component would otherwise be stuck showing "Xong!" with no way out short
+                    // of the user manually reloading. Force a fresh check instead — it either finds
+                    // the new SHA and hides the banner (up to date now), or finds nothing changed
+                    // and re-prompts, either of which beats staying frozen indefinitely.
+                    doneRecheckRef.current = window.setTimeout(() => {
+                        void getUpdateState(true).then((state) => setView(toView(state)));
+                    }, 4000);
                 } else {
                     setView({ phase: "failed", message: progress.message || "Cập nhật thất bại." });
                 }
