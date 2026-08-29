@@ -36,6 +36,10 @@ export interface TrackerPriorityItem {
     title: string;
     meta: string;
     message: StoredNivrisMessage;
+    /** Set only for a grouped thread row (2+ matched messages sharing a thread) — the individual
+     * messages the summary row collapsed, newest first, so the UI can offer an expand affordance
+     * instead of just losing them. Undefined for a single-message row. */
+    threadMessages?: StoredNivrisMessage[];
 }
 
 export interface TrackerTeamWeight {
@@ -77,7 +81,7 @@ const EMPTY_METRICS: TrackerMetrics = {
 
 const ROOM_COLORS = ["#0fa3a0", "#c97a22", "#6c5cff", "#2ba95f", "#de3f52"];
 
-function relativeTime(ts: number): string {
+export function relativeTime(ts: number): string {
     const diffMs = Date.now() - ts;
     const mins = Math.round(diffMs / 60000);
     if (mins < 1) return "vừa xong";
@@ -205,6 +209,7 @@ export async function computeTrackerMetrics(tracker: NivrisUserTracker, preloade
             title: `Thread: ${root.senderName}: ${truncate(root.body, 100)}`,
             meta: `${countPrefix}${relativeTime(latest.ts)}${roomSuffix}`,
             message: latest,
+            threadMessages: msgsDesc.length > 1 ? msgsDesc : undefined,
         };
     }
 
