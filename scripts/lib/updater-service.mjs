@@ -57,6 +57,11 @@ function systemdUnitPath() {
 export async function installHelperFiles({ scriptsDir, repo, log }) {
     const dir = helperInstallDir();
     fs.mkdirSync(dir, { recursive: true });
+    // Leftover from before the helper was bundled into a single file (it used to be copied here
+    // alongside a "lib/" subfolder of its own ./lib/*.mjs deps) — dead weight now that
+    // bundleHelperScript() below inlines everything into one file. Only matters for someone
+    // upgrading from that older layout; harmless no-op otherwise.
+    fs.rmSync(path.join(dir, "lib"), { recursive: true, force: true });
     const { bundleHelperScript } = await import("./bundle-helper.mjs");
     await bundleHelperScript(path.join(scriptsDir, "nivris-update-helper.mjs"), path.join(dir, "nivris-update-helper.mjs"));
 
