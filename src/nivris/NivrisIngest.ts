@@ -49,6 +49,10 @@ import { PRIORITY_KEYWORDS } from "./constants";
 import { askNivris } from "./NivrisApi";
 import { DEFAULT_NIVRIS_SETTINGS, isNivrisConfigured, type NivrisSettings } from "./types";
 
+// Spec-defined, stable relation type string (RelationType.Thread in matrix-js-sdk's enum barrel —
+// same "inline the literal instead of importing the barrel" reasoning as the constants above).
+const THREAD_RELATION = "m.thread";
+
 const RETENTION_DAYS = 7;
 const MAX_BACKFILL_PAGES_PER_ROOM = 10;
 const MAX_BODY_LENGTH = 2000;
@@ -132,6 +136,18 @@ function toRecord(event: MatrixEvent, room: Room, client: MatrixClient): StoredN
     if (!body.trim()) return null;
 
     const sender = event.getSender() ?? "?";
+    // Not event.threadRootId — that getter falls back through several SDK-internal heuristics
+    // (this.thread.id, this.threadId, a bundled unsigned field) whenever the event's own content
+    // has no direct thread relation, which is exactly the case for a thread's own root message.
+    // Those fallbacks read the SDK's Thread model, which isn't guaranteed to be resolved yet at
+    // the moment a live timeline event is ingested — confirmed live: root messages were showing up
+    // "in a thread" pointing at themselves, and at least one reply resolved to a genuinely wrong
+    // thread. The event's own m.relates_to is the one source Matrix itself guarantees correct
+    // (set by the sender at send time, immutable) — only replies carry it; a root message
+    // legitimately has no thread to reference, so this now correctly leaves it undefined instead
+    // of guessing.
+    const relatesTo = content["m.relates_to"] as { rel_type?: string; event_id?: string } | undefined;
+    const threadRootId = relatesTo?.rel_type === THREAD_RELATION ? relatesTo.event_id : undefined;
     return {
         id: event.getId()!,
         roomId: room.roomId,
@@ -140,7 +156,7 @@ function toRecord(event: MatrixEvent, room: Room, client: MatrixClient): StoredN
         senderName: room.getMember(sender)?.name ?? sender,
         ts: event.getTs(),
         body: body.length > MAX_BODY_LENGTH ? `${body.slice(0, MAX_BODY_LENGTH)}…` : body,
-        threadRootId: event.threadRootId,
+        threadRootId,
         mentionsMe: mentionsMe(content, body, client),
     };
 }
