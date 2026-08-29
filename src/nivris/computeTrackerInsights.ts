@@ -164,9 +164,20 @@ export async function computeTrackerMetrics(tracker: NivrisUserTracker, preloade
         byRoom.set(m.roomId, list);
     }
 
-    // "trong thread" alone doesn't say *which* thread — show the thread's own first message as a
-    // short preview instead, so you can tell threads apart without opening each one. Root ids are
-    // deduped and fetched once (not per-message) since several matches commonly share one thread.
+    // The room name is only worth repeating on every row when there's no room tab strip above to
+    // convey it — with 2+ rooms, the currently-selected tab already says which room, and restating
+    // it on every single row was pure noise (reported live).
+    const showRoomName = byRoom.size <= 1;
+    const truncate = (s: string, n: number): string => (s.length > n ? `${s.slice(0, n)}…` : s);
+
+    // A thread's own first message ("root") is a much better label for the group than "trong
+    // thread" (which doesn't say *which* thread) or than repeating every individual reply as its
+    // own flat row (reported live — a busy thread buried the feed under near-duplicate entries).
+    // Root ids are deduped and fetched once, not once per message, since several matches commonly
+    // share one thread. Only trackers other than "mention" get grouped: an @mention needs to stay
+    // individually markable "Đã xong" (see NivrisWorkspace.tsx), which collapsing several into one
+    // row would break.
+    const groupByThread = tracker.type !== "mention";
     const threadRootIds = Array.from(new Set(matches.map((m) => m.threadRootId).filter((id): id is string => !!id)));
     const threadRoots = new Map<string, StoredNivrisMessage>();
     if (threadRootIds.length) {
@@ -175,34 +186,50 @@ export async function computeTrackerMetrics(tracker: NivrisUserTracker, preloade
             if (root) threadRoots.set(threadRootIds[i], root);
         });
     }
-    function threadLabel(m: StoredNivrisMessage): string {
-        if (!m.threadRootId) return "";
-        const root = m.threadRootId === m.id ? m : threadRoots.get(m.threadRootId);
-        if (!root) return " • trong thread";
-        const preview = root.body.length > 40 ? `${root.body.slice(0, 40)}…` : root.body;
-        return ` • Thread: "${preview}"`;
+
+    function buildItem(msgsDesc: StoredNivrisMessage[]): TrackerPriorityItem {
+        const latest = msgsDesc[0];
+        const roomSuffix = showRoomName ? ` • ${latest.roomName}` : "";
+        if (!latest.threadRootId || !groupByThread) {
+            return {
+                color: PRIORITY_COLORS[0],
+                title: `${latest.senderName}: ${truncate(latest.body, 100)}`,
+                meta: `${relativeTime(latest.ts)}${roomSuffix}${latest.threadRootId ? ` • Thread: "${truncate((threadRoots.get(latest.threadRootId) ?? latest).body, 40)}"` : ""}`,
+                message: latest,
+            };
+        }
+        const root = threadRoots.get(latest.threadRootId) ?? latest;
+        const countPrefix = msgsDesc.length > 1 ? `${msgsDesc.length} tin • ` : "";
+        return {
+            color: PRIORITY_COLORS[0],
+            title: `Thread: ${root.senderName}: ${truncate(root.body, 100)}`,
+            meta: `${countPrefix}${relativeTime(latest.ts)}${roomSuffix}`,
+            message: latest,
+        };
     }
 
     const feedGroups: TrackerFeedGroup[] = Array.from(byRoom.entries())
         .sort((a, b) => Math.max(...b[1].map((m) => m.ts)) - Math.max(...a[1].map((m) => m.ts)))
-        .map(([roomId, roomMatches], i) => ({
-            roomId,
-            roomName: roomMatches[0].roomName,
-            color: ROOM_COLORS[i % ROOM_COLORS.length],
-            items: [...roomMatches]
-                .sort((a, b) => b.ts - a.ts)
-                .slice(0, MAX_ITEMS_PER_ROOM)
-                .map((m) => ({
-                    color: PRIORITY_COLORS[0],
-                    title: `${m.senderName}: ${m.body.length > 100 ? `${m.body.slice(0, 100)}…` : m.body}`,
-                    // Room name always shown here — not just conveyed via the currently-selected
-                    // room tab above, which isn't rendered at all when there's only one room to
-                    // pick from, and previously left that single room's messages with no visible
-                    // room label anywhere.
-                    meta: `${relativeTime(m.ts)} • ${m.roomName}${threadLabel(m)}`,
-                    message: m,
-                })),
-        }));
+        .map(([roomId, roomMatches], i) => {
+            const sorted = [...roomMatches].sort((a, b) => b.ts - a.ts);
+            let items: TrackerPriorityItem[];
+            if (groupByThread) {
+                const byThread = new Map<string, StoredNivrisMessage[]>();
+                for (const m of sorted) {
+                    const key = m.threadRootId ?? m.id;
+                    const list = byThread.get(key) ?? [];
+                    list.push(m);
+                    byThread.set(key, list);
+                }
+                items = Array.from(byThread.values())
+                    .sort((a, b) => b[0].ts - a[0].ts)
+                    .slice(0, MAX_ITEMS_PER_ROOM)
+                    .map(buildItem);
+            } else {
+                items = sorted.slice(0, MAX_ITEMS_PER_ROOM).map((m) => buildItem([m]));
+            }
+            return { roomId, roomName: roomMatches[0].roomName, color: ROOM_COLORS[i % ROOM_COLORS.length], items };
+        });
 
     return {
         matches,
