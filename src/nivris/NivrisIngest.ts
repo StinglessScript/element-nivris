@@ -137,16 +137,23 @@ function toRecord(event: MatrixEvent, room: Room, client: MatrixClient): StoredN
 
     const sender = event.getSender() ?? "?";
     // Not event.threadRootId — that getter falls back through several SDK-internal heuristics
-    // (this.thread.id, this.threadId, a bundled unsigned field) whenever the event's own content
-    // has no direct thread relation, which is exactly the case for a thread's own root message.
-    // Those fallbacks read the SDK's Thread model, which isn't guaranteed to be resolved yet at
-    // the moment a live timeline event is ingested — confirmed live: root messages were showing up
-    // "in a thread" pointing at themselves, and at least one reply resolved to a genuinely wrong
-    // thread. The event's own m.relates_to is the one source Matrix itself guarantees correct
-    // (set by the sender at send time, immutable) — only replies carry it; a root message
-    // legitimately has no thread to reference, so this now correctly leaves it undefined instead
-    // of guessing.
-    const relatesTo = content["m.relates_to"] as { rel_type?: string; event_id?: string } | undefined;
+    // (this.thread.id, this.threadId, a bundled unsigned field) whenever the event's own relation
+    // data has no direct thread relation, which is exactly the case for a thread's own root
+    // message. Those fallbacks read the SDK's Thread model, which isn't guaranteed to be resolved
+    // yet at the moment a live timeline event is ingested — confirmed live: root messages were
+    // showing up "in a thread" pointing at themselves, and at least one reply resolved to a
+    // genuinely wrong thread.
+    //
+    // getWireContent(), not getContent(): for an encrypted room, getContent() returns the
+    // *decrypted* inner payload — whatever relation data the sending client happened to duplicate
+    // in there, which isn't guaranteed present or correctly structured. Matrix's spec has senders
+    // put relations in the *cleartext* part of an m.room.encrypted event specifically so they're
+    // readable without decryption (servers need this to bundle threads) — getWireContent() reads
+    // that cleartext relation, the one place Matrix actually guarantees is correct (set by the
+    // sender at send time, immutable). This is also what the SDK's own threadRootId getter reads
+    // from for this exact check — an earlier version of this fix used getContent() instead, which
+    // is why it didn't fully fix the reported wrong-thread bug.
+    const relatesTo = event.getWireContent()?.["m.relates_to"] as { rel_type?: string; event_id?: string } | undefined;
     const threadRootId = relatesTo?.rel_type === THREAD_RELATION ? relatesTo.event_id : undefined;
     return {
         id: event.getId()!,
