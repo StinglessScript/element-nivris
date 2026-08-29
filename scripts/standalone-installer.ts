@@ -267,9 +267,19 @@ async function main(): Promise<void> {
 
     registerHelperService({ execPath: helperExecPath, args: [RUN_HELPER_FLAG], helperDir, log });
 
-    log("XONG. Mở Element lên để thấy N.I.V.R.I.S.");
+    // quitElementIfRunning() at the top of main() should already have closed it, but on Windows
+    // that step can silently fail to catch every process — closing the *window* isn't the same as
+    // quitting (Element often just minimizes to the system tray there) — reported live from a real
+    // Windows install: a leftover instance holding the old module (old shared token) made the
+    // freshly-patched one look broken until it was fully killed and reopened by hand. Say so
+    // explicitly rather than assuming the quit above always caught it.
+    log("XONG. Kiểm tra Element đã tắt hẳn chưa (Task Manager, không còn tiến trình 'Element' nào — Windows hay ẩn nó xuống khay hệ thống thay vì thoát) rồi mở lại để thấy N.I.V.R.I.S.");
     log("Từ giờ, khi có bản mới hoặc Element tự cập nhật ghi đè lại patch, banner trong app sẽ tự cập nhật — không cần chạy lại file này nữa.");
-    finish(TITLE, true, "Đã cài đặt N.I.V.R.I.S. thành công!\n\nMở Element lên để bắt đầu dùng.");
+    finish(
+        TITLE,
+        true,
+        "Đã cài đặt N.I.V.R.I.S. thành công!\n\nKiểm tra Element đã tắt hẳn (Task Manager, không còn tiến trình 'Element' — Windows hay ẩn xuống khay hệ thống thay vì thoát), rồi mở lại để bắt đầu dùng.",
+    );
 }
 
 if (process.argv.includes(RUN_HELPER_FLAG)) {
