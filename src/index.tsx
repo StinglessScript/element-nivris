@@ -42,9 +42,18 @@ class NivrisModule implements Module {
                 // custom space-panel item apparently doesn't trigger the same cleanup on its own.
                 // Bounce through the home screen first to get that same teardown for free, instead
                 // of relying on the user to manually detour through another space every time.
+                //
+                // The bounce itself is a real screen change though, so without masking it the user
+                // sees a home-screen flash before Nivris appears — reported live as "quá tệ về trải
+                // nghiệm". Cover it with a solid overlay for the (~150ms) duration of the detour so
+                // only the final "arrived at Nivris" moment is visible, not the intermediate hop.
+                const overlay = document.createElement("div");
+                overlay.style.cssText = "position:fixed;inset:0;z-index:99999;background:var(--jv-bg,#0b1416);";
+                document.body.appendChild(overlay);
                 window.location.hash = "#/";
                 window.setTimeout(() => {
                     window.location.hash = `#/${LOCATION_PATH}`;
+                    window.setTimeout(() => overlay.remove(), 90);
                 }, 60);
             },
         });
