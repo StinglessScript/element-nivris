@@ -177,12 +177,44 @@ export async function computeTrackerMetrics(tracker: NivrisUserTracker, preloade
     // "rối mắt" — visually cluttered): flat, one row per message, with the thread label on each,
     // is what stuck.
     const threadRootIds = Array.from(new Set(matches.map((m) => m.threadRootId).filter((id): id is string => !!id)));
-    const threadRoots = new Map<string, StoredNivrisMessage>();
+    // Only .body is ever read off an entry — a minimal shape so the network-fallback path below
+    // doesn't need to fabricate a full StoredNivrisMessage for something that was never ingested.
+    const threadRoots = new Map<string, { body: string }>();
     if (threadRootIds.length) {
         const roots = await Promise.all(threadRootIds.map((id) => getMessageById(id)));
+        const missing: string[] = [];
         roots.forEach((root, i) => {
             if (root) threadRoots.set(threadRootIds[i], root);
+            else missing.push(threadRootIds[i]);
         });
+        // Two DIFFERENT messages both showing "Thread: <themselves>" — reported live, confirmed to
+        // actually be the same real thread — traced to this: the thread's root can legitimately be
+        // missing from the local cache (started before Nivris was ingesting, or older than backfill
+        // reaches), and every message referencing it independently fell back to displaying its own
+        // body as if it were the root, which looks exactly like a wrong/self-referencing thread even
+        // though the underlying threadRootId was correct and shared all along. Fetch the actual root
+        // over the network instead of guessing when the local cache doesn't have it.
+        if (missing.length) {
+            const roomIdByRoot = new Map<string, string>();
+            for (const m of matches) {
+                if (m.threadRootId && missing.includes(m.threadRootId)) roomIdByRoot.set(m.threadRootId, m.roomId);
+            }
+            const client = getMatrixClient();
+            await Promise.all(
+                missing.map(async (id) => {
+                    const roomId = roomIdByRoot.get(id);
+                    if (!roomId) return;
+                    try {
+                        const raw = (await client.fetchRoomEvent(roomId, id)) as { content?: { body?: unknown } } | undefined;
+                        const body = typeof raw?.content?.body === "string" ? raw.content.body : "";
+                        if (body) threadRoots.set(id, { body });
+                    } catch {
+                        // offline, redacted, no access to the event, etc. — leave unset, buildItem
+                        // falls back to the message's own body same as before this existed
+                    }
+                }),
+            );
+        }
     }
 
     function buildItem(m: StoredNivrisMessage): TrackerPriorityItem {
