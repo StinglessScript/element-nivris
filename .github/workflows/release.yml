@@ -147,10 +147,18 @@ jobs:
           name: nivris-module
           path: dist
 
+      # The trailing commit SHA is load-bearing, not decorative — see NivrisUpdateChecker.ts's
+      # fetchLatestSha(), which reads it back out of this exact field via the (CORS-enabled)
+      # releases/latest API. It needs this because commits/main updates the instant a commit is
+      # pushed, well before this job finishes actually publishing new assets a few minutes later —
+      # comparing against that raced the in-app "update available" banner ahead of there being
+      # anything new to download yet, so clicking Update just reapplied the still-current build and
+      # looked stuck in a loop until this job caught up. This release `name` only changes once this
+      # step actually runs, at the very end of a real successful publish.
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.0.0
-          name: "N.I.V.R.I.S. installers (v1)"
+          name: "N.I.V.R.I.S. installers (v1) — ${{ github.sha }}"
           make_latest: "true"
           files: |
             dist/NivrisInstaller-macOS.zip

@@ -82,17 +82,26 @@ async function fetchHelperStatus(): Promise<HelperStatus | null> {
 
 async function fetchLatestSha(): Promise<string | null> {
     try {
-        // NOT the same URL the helper downloads from (github.com/.../releases/latest/download/...)
-        // — that redirects to Azure Blob Storage, whose response has no
+        // NOT github.com/.../releases/latest/download/nivris-version.json (what the helper actually
+        // downloads) — that redirects to Azure Blob Storage, whose response has no
         // Access-Control-Allow-Origin header, so a browser fetch() from this renderer context
         // silently fails (caught below, indistinguishable from "offline"). api.github.com sets
-        // "access-control-allow-origin: *" on its public GET endpoints, so use that instead just
-        // for the version check; the helper's actual download (plain Node https, not subject to
-        // CORS) is unaffected and keeps using the release asset.
-        const res = await fetchWithTimeout(`https://api.github.com/repos/${REPO}/commits/main`);
+        // "access-control-allow-origin: *" on its public GET endpoints, so use that instead.
+        //
+        // NOT commits/main either, despite also being CORS-fine — that reflects the instant a
+        // commit is pushed, well before the release workflow (a few minutes) actually finishes
+        // publishing new assets built from it. Comparing against git HEAD directly raced the
+        // in-app "update available" banner ahead of there being anything new to download: push
+        // lands, banner immediately claims an update, but clicking it just re-downloads the
+        // still-current build (CI isn't done yet) and reapplies the same SHA, looking stuck in a
+        // loop until CI catches up minutes later. The release's own `name` field only changes once
+        // the publish job's final step actually runs — see release.yml's matching comment — so it
+        // tracks what's truly downloadable right now, not what's merely been committed.
+        const res = await fetchWithTimeout(`https://api.github.com/repos/${REPO}/releases/latest`);
         if (!res.ok) return null;
-        const data = (await res.json()) as { sha?: unknown };
-        return typeof data.sha === "string" ? data.sha : null;
+        const data = (await res.json()) as { name?: unknown };
+        const match = typeof data.name === "string" ? /\b([0-9a-f]{40})\b/.exec(data.name) : null;
+        return match ? match[1] : null;
     } catch {
         return null;
     }
