@@ -605,6 +605,34 @@ body[class*="cpd-theme-dark"] {
 
 .mx_NivrisWorkspace_feed { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 10px; padding-bottom: 14px; }
 
+.mx_NivrisWorkspace_feedHeader { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.mx_NivrisWorkspace_feedHeader .mx_NivrisWorkspace_sectionLabel { margin-bottom: 0; }
+
+/* Compact joined-pill toggle (Chưa xong / Đã xong) — deliberately distinct from the room chips
+   below it (.mx_NivrisWorkspace_roomTab) so the two read as different kinds of filter (a status
+   switch vs. a list of rooms to pick from) instead of one confusing row of identical-looking pills. */
+.mx_NivrisWorkspace_segmented {
+    flex-shrink: 0;
+    display: flex;
+    gap: 2px;
+    padding: 2px;
+    border-radius: 8px;
+    background-color: var(--jv-teal-wash);
+}
+.mx_NivrisWorkspace_segmentedBtn {
+    appearance: none;
+    height: 22px;
+    padding: 0 9px;
+    border: none;
+    border-radius: 6px;
+    background: none;
+    font: 500 10.5px var(--jv-sans);
+    color: var(--jv-muted);
+    cursor: pointer;
+}
+.mx_NivrisWorkspace_segmentedBtn:hover { color: var(--jv-ink); }
+.mx_NivrisWorkspace_segmentedBtn_active { background-color: var(--jv-surface); color: var(--jv-ink); box-shadow: 0 1px 2px rgb(0 0 0 / 8%); }
+
 .mx_NivrisWorkspace_roomTabs {
     flex-shrink: 0;
     display: flex;

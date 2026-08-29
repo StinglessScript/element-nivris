@@ -522,40 +522,44 @@ const NivrisWorkspace: React.FC = () => {
                                         </section>
 
                                         <section className="mx_NivrisWorkspace_feed">
-                                            <div className="mx_NivrisWorkspace_sectionLabel">TIN NỔI BẬT</div>
+                                            <div className="mx_NivrisWorkspace_feedHeader">
+                                                <div className="mx_NivrisWorkspace_sectionLabel">TIN NỔI BẬT</div>
+                                                {isMentionTracker && !!activeMetrics?.feedGroups.length && (
+                                                    <div className="mx_NivrisWorkspace_segmented">
+                                                        <button
+                                                            className={`mx_NivrisWorkspace_segmentedBtn ${feedFilter === "open" ? "mx_NivrisWorkspace_segmentedBtn_active" : ""}`}
+                                                            onClick={() => setFeedFilter("open")}
+                                                        >
+                                                            Chưa xong
+                                                        </button>
+                                                        <button
+                                                            className={`mx_NivrisWorkspace_segmentedBtn ${feedFilter === "done" ? "mx_NivrisWorkspace_segmentedBtn_active" : ""}`}
+                                                            onClick={() => setFeedFilter("done")}
+                                                        >
+                                                            Đã xong
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </div>
                                             {!activeMetrics || activeMetrics.feedGroups.length === 0 ? (
                                                 <div className="mx_NivrisWorkspace_feedEmpty">Chưa có tin nhắn nào khớp với session này.</div>
                                             ) : (
                                                 <>
-                                                    {isMentionTracker && (
+                                                    {activeMetrics.feedGroups.length > 1 && (
                                                         <div className="mx_NivrisWorkspace_roomTabs">
-                                                            <button
-                                                                className={`mx_NivrisWorkspace_roomTab ${feedFilter === "open" ? "mx_NivrisWorkspace_roomTab_active" : ""}`}
-                                                                onClick={() => setFeedFilter("open")}
-                                                            >
-                                                                Chưa xong
-                                                            </button>
-                                                            <button
-                                                                className={`mx_NivrisWorkspace_roomTab ${feedFilter === "done" ? "mx_NivrisWorkspace_roomTab_active" : ""}`}
-                                                                onClick={() => setFeedFilter("done")}
-                                                            >
-                                                                Đã xong
-                                                            </button>
+                                                            {activeMetrics.feedGroups.map((group) => (
+                                                                <button
+                                                                    key={group.roomId}
+                                                                    className={`mx_NivrisWorkspace_roomTab ${group.roomId === activeRoomId ? "mx_NivrisWorkspace_roomTab_active" : ""}`}
+                                                                    onClick={() => setActiveRoomId(group.roomId)}
+                                                                >
+                                                                    <span className="mx_NivrisWorkspace_roomTabDot" style={{ backgroundColor: group.color }} />
+                                                                    {group.roomName}
+                                                                    <span className="mx_NivrisWorkspace_roomTabCount">{group.items.length}</span>
+                                                                </button>
+                                                            ))}
                                                         </div>
                                                     )}
-                                                    <div className="mx_NivrisWorkspace_roomTabs">
-                                                        {activeMetrics.feedGroups.map((group) => (
-                                                            <button
-                                                                key={group.roomId}
-                                                                className={`mx_NivrisWorkspace_roomTab ${group.roomId === activeRoomId ? "mx_NivrisWorkspace_roomTab_active" : ""}`}
-                                                                onClick={() => setActiveRoomId(group.roomId)}
-                                                            >
-                                                                <span className="mx_NivrisWorkspace_roomTabDot" style={{ backgroundColor: group.color }} />
-                                                                {group.roomName}
-                                                                <span className="mx_NivrisWorkspace_roomTabCount">{group.items.length}</span>
-                                                            </button>
-                                                        ))}
-                                                    </div>
                                                     <div className="mx_NivrisWorkspace_feedList">
                                                         {visibleFeedItems.length === 0 && isMentionTracker ? (
                                                             <div className="mx_NivrisWorkspace_feedEmpty">
