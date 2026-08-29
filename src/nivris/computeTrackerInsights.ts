@@ -6,7 +6,7 @@ Please see LICENSE files in the repository root for full details.
 */
 
 import { getMatrixClient } from "../matrixClient";
-import { getMentions, getMessagesSince, searchMessages, type StoredNivrisMessage } from "./NivrisMessageDb";
+import { getMentions, getMessageById, getMessagesSince, searchMessages, type StoredNivrisMessage } from "./NivrisMessageDb";
 import { askNivris, NivrisApiError, type NivrisMessage } from "./NivrisApi";
 import { type NivrisSettings } from "./types";
 import { type NivrisChatMessage, type NivrisUserTracker } from "./NivrisTrackerStore";
@@ -163,6 +163,26 @@ export async function computeTrackerMetrics(tracker: NivrisUserTracker, preloade
         list.push(m);
         byRoom.set(m.roomId, list);
     }
+
+    // "trong thread" alone doesn't say *which* thread — show the thread's own first message as a
+    // short preview instead, so you can tell threads apart without opening each one. Root ids are
+    // deduped and fetched once (not per-message) since several matches commonly share one thread.
+    const threadRootIds = Array.from(new Set(matches.map((m) => m.threadRootId).filter((id): id is string => !!id)));
+    const threadRoots = new Map<string, StoredNivrisMessage>();
+    if (threadRootIds.length) {
+        const roots = await Promise.all(threadRootIds.map((id) => getMessageById(id)));
+        roots.forEach((root, i) => {
+            if (root) threadRoots.set(threadRootIds[i], root);
+        });
+    }
+    function threadLabel(m: StoredNivrisMessage): string {
+        if (!m.threadRootId) return "";
+        const root = m.threadRootId === m.id ? m : threadRoots.get(m.threadRootId);
+        if (!root) return " • trong thread";
+        const preview = root.body.length > 40 ? `${root.body.slice(0, 40)}…` : root.body;
+        return ` • Thread: "${preview}"`;
+    }
+
     const feedGroups: TrackerFeedGroup[] = Array.from(byRoom.entries())
         .sort((a, b) => Math.max(...b[1].map((m) => m.ts)) - Math.max(...a[1].map((m) => m.ts)))
         .map(([roomId, roomMatches], i) => ({
@@ -179,7 +199,7 @@ export async function computeTrackerMetrics(tracker: NivrisUserTracker, preloade
                     // room tab above, which isn't rendered at all when there's only one room to
                     // pick from, and previously left that single room's messages with no visible
                     // room label anywhere.
-                    meta: `${relativeTime(m.ts)} • ${m.roomName}${m.threadRootId ? " • trong thread" : ""}`,
+                    meta: `${relativeTime(m.ts)} • ${m.roomName}${threadLabel(m)}`,
                     message: m,
                 })),
         }));
