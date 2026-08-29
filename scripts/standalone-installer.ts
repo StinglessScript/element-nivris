@@ -15,12 +15,13 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import crypto from "node:crypto";
+import { execFileSync } from "node:child_process";
 
 import { finish, log as logRaw } from "./lib/finish";
 import { findElementResourcesDirWindows } from "./lib/find-element-windows.mjs";
 import { setProgress, startProgress } from "./lib/progress-win";
 import { quitElementIfRunning } from "./lib/quit-element";
-import { helperInstallDir, registerHelperService } from "./lib/updater-service.mjs";
+import { helperInstallDir, killByPidFile, registerHelperService } from "./lib/updater-service.mjs";
 
 // Embeds lib/index.js into the compiled binary; at runtime (compiled or not) this resolves to a
 // real file path on disk (Bun extracts embedded files to a temp dir when running as a compiled
@@ -52,6 +53,38 @@ const TITLE = "Cài đặt N.I.V.R.I.S.";
 function log(msg: string): void {
     logRaw("nivris-install", msg);
 }
+/** Windows won't let you overwrite a .exe file that's currently running as a live process —
+ * unlike POSIX, where the old inode just stays open under the still-running process while the
+ * path gets a fresh file. A previous install/test leaving the helper running (its own scheduled
+ * task, or a manual `--run-helper` test session) makes a plain copyFileSync fail with EBUSY.
+ * Stop whatever's holding it — by its recorded pid first, then by image name as a backstop for a
+ * stale/missing pid file (e.g. a manually-run test instance never wrote one) — and give Windows a
+ * moment to actually release the file handle before retrying; process exit and handle release
+ * aren't quite synchronous. No-op (immediate success) when nothing was running. */
+function copyExecutableReplacingRunningInstance(src: string, dest: string, helperDir: string): void {
+    for (let attempt = 0; ; attempt++) {
+        try {
+            fs.copyFileSync(src, dest);
+            return;
+        } catch (e) {
+            const code = (e as { code?: string } | undefined)?.code;
+            if (attempt >= 4 || (code !== "EBUSY" && code !== "EPERM")) throw e;
+            killByPidFile(helperDir);
+            if (process.platform === "win32") {
+                try {
+                    execFileSync("taskkill", ["/IM", path.basename(dest), "/F"], { stdio: "ignore" });
+                } catch {
+                    // wasn't running under that name either — fine, the retry below will surface
+                    // whatever's actually still wrong
+                }
+            }
+            const until = Date.now() + 400;
+            const sab = new SharedArrayBuffer(4);
+            Atomics.wait(new Int32Array(sab), 0, 0, Math.max(0, until - Date.now()));
+        }
+    }
+}
+
 /**
  * Standalone-binary equivalent of scripts/lib/updater-service.mjs's installHelperFiles() — that
  * version copies the plain-.mjs helper + its ./lib deps from a real `scripts/` checkout on disk,
@@ -65,7 +98,7 @@ function installHelperFilesStandalone(): { dir: string; execPath: string; token:
     const dir = helperInstallDir();
     fs.mkdirSync(dir, { recursive: true });
     const execPath = path.join(dir, process.platform === "win32" ? "nivris-update-helper.exe" : "nivris-update-helper");
-    fs.copyFileSync(process.execPath, execPath);
+    copyExecutableReplacingRunningInstance(process.execPath, execPath, dir);
     if (process.platform !== "win32") fs.chmodSync(execPath, 0o755);
 
     const token = crypto.randomBytes(16).toString("hex");

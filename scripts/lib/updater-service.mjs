@@ -66,7 +66,7 @@ export async function installHelperFiles({ scriptsDir, repo, log }) {
     return { dir, token, port: HELPER_PORT };
 }
 
-function killByPidFile(dir) {
+export function killByPidFile(dir) {
     const pidFile = path.join(dir, "helper.pid");
     if (!fs.existsSync(pidFile)) return;
     try {
