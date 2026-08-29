@@ -76,7 +76,7 @@ npx -y -p github:StinglessScript/element-nivris nivris-install
 ```
 
 - macOS: patches `/Applications/Element.app`. No `sudo` needed (just a one-time "App Management" permission grant the first time — the command's own error message tells you exactly where to enable it if it's missing).
-- Windows: patches `%LOCALAPPDATA%\Element\app-x.y.z` (Squirrel install) — untested, please report issues.
+- Windows: patches `%LOCALAPPDATA%\Element\app-x.y.z` (Squirrel install) — tested end-to-end, including the background auto-update helper recovering after Element's own Squirrel auto-updater wipes the patch.
 - Linux: patches a `.deb`/apt install at `/opt/Element` — needs `sudo`, since `/opt` is root-owned:
   ```bash
   sudo npx -y -p github:StinglessScript/element-nivris nivris-install
