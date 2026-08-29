@@ -34,7 +34,18 @@ class NivrisModule implements Module {
             label: "N.I.V.R.I.S.",
             tooltip: "N.I.V.R.I.S. — Neural Intelligence & Virtual Reasoning Interface System",
             onSelected: () => {
-                window.location.hash = `#/${LOCATION_PATH}`;
+                // Reported live and confirmed by direct testing: going straight from a room view to
+                // "nivris" leaves Element's RoomViewStore thinking that room is still current, which
+                // yanks the view back to it moments later if a threaded message was opened via "Mở
+                // trong Element" first. Switching to any *other* real space in between doesn't have
+                // this problem — that transition properly tears down the active-room state, nivris's
+                // custom space-panel item apparently doesn't trigger the same cleanup on its own.
+                // Bounce through the home screen first to get that same teardown for free, instead
+                // of relying on the user to manually detour through another space every time.
+                window.location.hash = "#/";
+                window.setTimeout(() => {
+                    window.location.hash = `#/${LOCATION_PATH}`;
+                }, 60);
             },
         });
 
