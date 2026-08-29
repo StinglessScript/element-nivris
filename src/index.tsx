@@ -38,6 +38,16 @@ class NivrisModule implements Module {
             },
         });
 
+        // Without this, Element has no way to know the "nivris" space never shows a room — its own
+        // docs on this method say exactly that gap makes it "redirect to display the room in its
+        // vanilla space/metaspace" instead. Reported live: opening a threaded message via "Mở
+        // trong Element" then switching back to Nivris got yanked back to the room ~1.7s later, on
+        // every attempt — but the same open-thread-then-switch-space sequence was fine switching to
+        // any *other* space, which only makes sense if Element still considered that room "current"
+        // specifically while the nivris space was active (an empty visible-room list is accurate:
+        // no room is ever shown *inside* the nivris space itself).
+        this.api.extras.getVisibleRoomBySpaceKey(SPACE_KEY, () => []);
+
         startThreadPanelIconInjector(this.api);
 
         const bannerHost = document.createElement("div");
