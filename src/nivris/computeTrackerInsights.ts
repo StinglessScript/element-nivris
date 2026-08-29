@@ -175,7 +175,11 @@ export async function computeTrackerMetrics(tracker: NivrisUserTracker, preloade
                 .map((m) => ({
                     color: PRIORITY_COLORS[0],
                     title: `${m.senderName}: ${m.body.length > 100 ? `${m.body.slice(0, 100)}…` : m.body}`,
-                    meta: relativeTime(m.ts),
+                    // Room name always shown here — not just conveyed via the currently-selected
+                    // room tab above, which isn't rendered at all when there's only one room to
+                    // pick from, and previously left that single room's messages with no visible
+                    // room label anywhere.
+                    meta: `${relativeTime(m.ts)} • ${m.roomName}${m.threadRootId ? " • trong thread" : ""}`,
                     message: m,
                 })),
         }));
