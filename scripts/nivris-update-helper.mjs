@@ -40,12 +40,17 @@ import {
 // When run as a plain script (`node nivris-update-helper.mjs`, the install-nivris.mjs CLI path),
 // import.meta.url correctly points at this file's real location on disk, right next to
 // helper-config.json. When run as a `bun build --compile`d standalone binary instead (the
-// standalone-installer.ts path), import.meta.url points at a virtual in-bundle path
-// (file:///$bunfs/root/...) that doesn't exist on the real filesystem — the config file actually
-// sits next to the compiled executable itself, i.e. process.execPath's directory, instead.
-const helperDir = fileURLToPath(import.meta.url).includes("$bunfs")
-    ? path.dirname(process.execPath)
-    : path.dirname(fileURLToPath(import.meta.url));
+// standalone-installer.ts path), import.meta.url points at a virtual in-bundle path that doesn't
+// exist on the real filesystem — the config file actually sits next to the compiled executable
+// itself, i.e. process.execPath's directory, instead. That virtual path's format is NOT the same
+// across platforms — macOS/Linux use `file:///$bunfs/root/...`, but Windows uses a fake drive
+// letter instead (`B:\~BUN\root\...`, confirmed from a real crash log: a Windows install kept
+// trying to load config from that literal path). Checking for the string "$bunfs" alone silently
+// mis-detected "real file" on Windows and pointed at a directory that doesn't exist. Check reality
+// instead of guessing at Bun's per-platform virtual-path spelling: a real script file's directory
+// exists on disk; a virtual bunfs one never does, on any platform.
+const scriptDir = path.dirname(fileURLToPath(import.meta.url));
+const helperDir = fs.existsSync(scriptDir) ? scriptDir : path.dirname(process.execPath);
 const configPath = path.join(helperDir, "helper-config.json");
 
 function log(msg) {
