@@ -109,7 +109,10 @@ const NivrisWorkspace: React.FC = () => {
     const [inspectorTab, setInspectorTab] = useState<"message" | "info" | "chat">("info");
     const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
     const [feedFilter, setFeedFilter] = useState<"open" | "done">("open");
-    const [expandedThreads, setExpandedThreads] = useState<Set<string>>(new Set());
+    // Threads default open (empty = nothing collapsed) — reported live: entering a session and
+    // having to click every thread open to see what's new was the wrong default. Tracks which
+    // threads were explicitly collapsed instead of which were explicitly opened.
+    const [collapsedThreads, setCollapsedThreads] = useState<Set<string>>(new Set());
     const [doneIds, setDoneIds] = useState<ReadonlySet<string>>(NivrisDoneStore.instance.getAll());
     const [summaryOpen, setSummaryOpen] = useState(false);
     const [chatInput, setChatInput] = useState("");
@@ -145,7 +148,7 @@ const NivrisWorkspace: React.FC = () => {
         setInspectorTab("info");
         setSummaryOpen(false);
         setFeedFilter("open");
-        setExpandedThreads(new Set());
+        setCollapsedThreads(new Set());
     }, [activeId]);
 
     // Recomputed whenever the tracker list changes AND on a short poll, since new messages land in
@@ -573,7 +576,7 @@ const NivrisWorkspace: React.FC = () => {
                                                         ) : (
                                                             visibleFeedItems.map((p, i) => {
                                                                 const threadKey = p.threadMessages ? (p.message.threadRootId ?? p.message.id) : null;
-                                                                const isExpanded = !!threadKey && expandedThreads.has(threadKey);
+                                                                const isExpanded = !!threadKey && !collapsedThreads.has(threadKey);
                                                                 return (
                                                                     <div key={i}>
                                                                         <div
@@ -584,7 +587,7 @@ const NivrisWorkspace: React.FC = () => {
                                                                                     className="mx_NivrisWorkspace_feedExpandBtn"
                                                                                     title={isExpanded ? "Thu gọn" : `Xem ${p.threadMessages?.length} tin trong thread`}
                                                                                     onClick={() =>
-                                                                                        setExpandedThreads((prev) => {
+                                                                                        setCollapsedThreads((prev) => {
                                                                                             const next = new Set(prev);
                                                                                             if (next.has(threadKey)) next.delete(threadKey);
                                                                                             else next.add(threadKey);
