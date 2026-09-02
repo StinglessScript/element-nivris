@@ -170,6 +170,79 @@ async function handleUpdate() {
     }
 }
 
+/**
+ * Detects Element's own auto-updater wiping the patch and re-applies it immediately, without
+ * waiting for the renderer to poll /status (which can't happen at all if the wipe already broke
+ * the app — see NivrisUpdateChecker.ts's "patch-missing" doc comment). Debounced: Squirrel's own
+ * writes (extracting the new version, swapping directories) aren't atomic from an outside watcher's
+ * perspective, so this waits for things to go quiet before checking, rather than reacting to the
+ * very first fs event and racing a half-written install.
+ */
+let healDebounce;
+function scheduleHealCheck() {
+    clearTimeout(healDebounce);
+    healDebounce = setTimeout(() => {
+        if (updating) return;
+        const { patched } = readStatus();
+        if (!patched) {
+            log("Phát hiện Element vừa tự cập nhật (patch bị mất) — tự vá lại...");
+            void handleUpdate();
+        }
+    }, 3000);
+}
+
+/**
+ * macOS: Squirrel.Mac swaps the *same* /Applications/Element.app path in place (no version
+ * subfolders) — watching the app's parent dir for a rename of "Element.app" catches that swap.
+ * Windows: Squirrel installs each version as a fresh app-x.y.z sibling folder (see
+ * find-element-windows.mjs) — watching that base dir for a new "app-*" entry catches it instead.
+ * Linux .deb installs don't self-update this way (apt does), so there's nothing to watch there.
+ * Best-effort: fs.watch is unavailable/unreliable on some filesystems (e.g. certain network
+ * mounts) — falls back to relying on the renderer's own poll-driven "patch-missing" path.
+ */
+function watchForElementSelfUpdate() {
+    if (process.platform !== "darwin" && process.platform !== "win32") return;
+
+    let resourcesDir;
+    try {
+        resourcesDir = findElementApp({
+            fail: (msg) => {
+                throw new Error(msg);
+            },
+        });
+    } catch {
+        return; // nothing installed yet to watch — the initial check-and-heal below still runs
+    }
+
+    const watchDir =
+        process.platform === "darwin"
+            ? path.dirname(path.dirname(path.dirname(resourcesDir))) // .../Contents/Resources -> .../
+            : path.dirname(path.dirname(resourcesDir)); // .../app-x.y.z/resources -> the base dir holding app-* siblings
+
+    const isRelevant =
+        process.platform === "darwin"
+            ? (filename) => filename === "Element.app"
+            : (filename) => typeof filename === "string" && filename.startsWith("app-");
+
+    try {
+        const watcher = fs.watch(watchDir, (_eventType, filename) => {
+            if (isRelevant(filename)) scheduleHealCheck();
+        });
+        watcher.on("error", (e) => {
+            log(`Watcher lỗi (${watchDir}): ${e.message} — thử gắn lại sau 30s.`);
+            try {
+                watcher.close();
+            } catch {
+                // already dead
+            }
+            setTimeout(watchForElementSelfUpdate, 30000);
+        });
+        log(`Đang theo dõi ${watchDir} để tự phát hiện Element tự cập nhật.`);
+    } catch (e) {
+        log(`Không bật được auto-heal watcher (${watchDir}): ${e.message}`);
+    }
+}
+
 function authorized(req) {
     const token = req.headers["x-nivris-token"];
     return typeof token === "string" && token === config.token;
@@ -246,3 +319,8 @@ server.listen(config.port, "127.0.0.1", () => {
     fs.writeFileSync(path.join(helperDir, "helper.pid"), String(process.pid));
     log(`Đang lắng nghe tại http://127.0.0.1:${config.port}`);
 });
+
+// Covers the case where Element self-updated while this helper wasn't running at all (machine was
+// off, helper crashed, etc.) — the watcher below only catches updates that happen *while* it's up.
+scheduleHealCheck();
+watchForElementSelfUpdate();
