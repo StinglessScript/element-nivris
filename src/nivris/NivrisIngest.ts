@@ -128,7 +128,7 @@ function mentionsMe(content: Record<string, unknown>, body: string, client: Matr
     return new RegExp(`@${escapeRegExp(myDisplayName)}\\b`, "i").test(body);
 }
 
-function toRecord(event: MatrixEvent, room: Room, client: MatrixClient): StoredNivrisMessage | null {
+export function toRecord(event: MatrixEvent, room: Room, client: MatrixClient): StoredNivrisMessage | null {
     if (event.getType() !== EventType.RoomMessage || event.isRedacted()) return null;
 
     const content = event.getContent();

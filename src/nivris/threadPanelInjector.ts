@@ -8,10 +8,18 @@ Please see LICENSE files in the repository root for full details.
 import React, { useState } from "react";
 
 import type { Api } from "@element-hq/element-web-module-api";
+import type { Direction as DirectionT } from "matrix-js-sdk/src/matrix";
 import NivrisThreadSummaryDialog from "../components/NivrisThreadSummaryDialog";
 import { DEFAULT_NIVRIS_SETTINGS, isNivrisConfigured, type NivrisSettings } from "./types";
-import { getMessagesByThreadRoot } from "./NivrisMessageDb";
+import { type StoredNivrisMessage } from "./NivrisMessageDb";
 import { summarizeThread } from "./computeTrackerInsights";
+import { getMatrixClient } from "../matrixClient";
+import { toRecord } from "./NivrisIngest";
+
+// Same "inline the literal instead of importing the value from the barrel" reasoning as
+// NivrisIngest.ts — importing Direction as a value drags in a big slice of matrix-js-sdk's bundle.
+const Direction = { Backward: "b" as DirectionT.Backward };
+const THREAD_SUMMARY_MAX_PAGES = 10;
 
 const HEADER_TITLE_SELECTOR = ".mx_ThreadView .mx_BaseCard_header_title";
 const MARKER_CLASS = "mx_Nivris_threadHeaderBtnHost";
@@ -27,10 +35,11 @@ function readSettings(): NivrisSettings {
 
 interface MatrixEventLike {
     getId(): string | undefined;
+    getRoomId(): string | undefined;
 }
 
 function isMatrixEventLike(v: unknown): v is MatrixEventLike {
-    return !!v && typeof (v as MatrixEventLike).getId === "function";
+    return !!v && typeof (v as MatrixEventLike).getId === "function" && typeof (v as MatrixEventLike).getRoomId === "function";
 }
 
 /**
@@ -44,16 +53,52 @@ function isMatrixEventLike(v: unknown): v is MatrixEventLike {
  * node inside our own `api.createRoot()` tree, since `fiber.return` never crosses between two
  * separate React roots.
  */
-function findThreadRootEventId(domNode: Element): string | undefined {
+function findThreadRootEventId(domNode: Element): { id: string; roomId: string } | undefined {
     const fiberKey = Object.keys(domNode).find((k) => k.startsWith("__reactFiber$") || k.startsWith("__reactInternalInstance$"));
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let fiber: any = fiberKey ? (domNode as any)[fiberKey] : undefined;
     for (let i = 0; fiber && i < 200; i++) {
         const mxEvent = fiber.memoizedProps?.mxEvent;
-        if (isMatrixEventLike(mxEvent)) return mxEvent.getId();
+        if (isMatrixEventLike(mxEvent)) {
+            const id = mxEvent.getId();
+            const roomId = mxEvent.getRoomId();
+            if (id && roomId) return { id, roomId };
+        }
         fiber = fiber.return;
     }
     return undefined;
+}
+
+/**
+ * Reads a thread's messages straight from the Matrix SDK's in-memory thread timeline — that's the
+ * single source of truth for "what's in this thread" (it's literally what the open Thread panel
+ * itself is rendering right now), so there's no reason to route through NivrisIngest's separate
+ * IndexedDB cache, which exists for a different feature (the report-reminder scan) and only ever
+ * covers the *current* day by design — it would silently under-summarize (or, before this, report
+ * "empty") any thread without activity today.
+ *
+ * Paginates backward first so a long thread that hasn't been fully scrolled into view still gets
+ * summarized in full, not just whatever happens to be loaded from viewing it.
+ */
+async function readThreadMessages(roomId: string, threadRootId: string): Promise<StoredNivrisMessage[]> {
+    const client = getMatrixClient();
+    const room = client.getRoom(roomId);
+    const thread = room?.getThread(threadRootId);
+    if (!room || !thread) return [];
+
+    for (let page = 0; page < THREAD_SUMMARY_MAX_PAGES; page++) {
+        if (!thread.liveTimeline.getPaginationToken(Direction.Backward)) break;
+        try {
+            if (!(await client.paginateEventTimeline(thread.liveTimeline, { backwards: true, limit: 200 }))) break;
+        } catch {
+            break; // best-effort — summarize whatever's already loaded rather than fail the whole thing
+        }
+    }
+
+    const events = thread.liveTimeline.getEvents();
+    await Promise.all(events.filter((e) => e.isEncrypted()).map((e) => client.decryptEventIfNeeded(e, { emit: false })));
+
+    return events.map((e) => toRecord(e, room, client)).filter((r): r is StoredNivrisMessage => r !== null);
 }
 
 const NivrisThreadHeaderButton: React.FC<{ api: Api; titleEl: Element }> = ({ api, titleEl }) => {
@@ -63,8 +108,8 @@ const NivrisThreadHeaderButton: React.FC<{ api: Api; titleEl: Element }> = ({ ap
         e.stopPropagation();
         if (state === "loading") return;
 
-        const threadRootId = findThreadRootEventId(titleEl);
-        if (!threadRootId) {
+        const threadRoot = findThreadRootEventId(titleEl);
+        if (!threadRoot) {
             setState("error");
             window.setTimeout(() => setState("idle"), 2000);
             return;
@@ -77,7 +122,7 @@ const NivrisThreadHeaderButton: React.FC<{ api: Api; titleEl: Element }> = ({ ap
             if (!isNivrisConfigured(settings)) {
                 bullets = ["Chưa cấu hình AI — mở N.I.V.R.I.S. (icon ở thanh space) → biểu tượng cài đặt để nhập model, base URL và API key."];
             } else {
-                const threadMessages = await getMessagesByThreadRoot(threadRootId);
+                const threadMessages = await readThreadMessages(threadRoot.roomId, threadRoot.id);
                 bullets = await summarizeThread(settings, threadMessages);
             }
             setState("idle");
