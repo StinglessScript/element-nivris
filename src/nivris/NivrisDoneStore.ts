@@ -25,9 +25,9 @@ function save(ids: Set<string>): void {
 }
 
 /** Tracks which feed items (by their underlying message id — a stable Matrix event id) the user
- * has marked "Đã xong" — e.g. an @mention they've already handled. Messages themselves are
+ * has marked "Đã xem" — e.g. an @mention they've already handled. Messages themselves are
  * recomputed fresh on every poll (see computeTrackerInsights.ts), so this can't live as component
- * state or on the message record; same persisted-singleton pattern as NivrisTaskStore. */
+ * state or on the message record; same persisted-singleton pattern as NivrisTrackerStore. */
 class NivrisDoneStore extends EventEmitter {
     private static internalInstance: NivrisDoneStore;
 
@@ -53,10 +53,19 @@ class NivrisDoneStore extends EventEmitter {
     }
 
     public setDone(id: string, done: boolean): void {
-        if (done === this.ids.has(id)) return;
+        this.setManyDone([id], done);
+    }
+
+    /** Bulk version of {@link setDone} — one save + one change event for the whole batch, so
+     * marking a whole room done doesn't re-render the feed once per message. */
+    public setManyDone(ids: readonly string[], done: boolean): void {
+        const changed = ids.filter((id) => this.ids.has(id) !== done);
+        if (changed.length === 0) return;
         this.ids = new Set(this.ids);
-        if (done) this.ids.add(id);
-        else this.ids.delete(id);
+        for (const id of changed) {
+            if (done) this.ids.add(id);
+            else this.ids.delete(id);
+        }
         save(this.ids);
         this.emit(NIVRIS_DONE_STORE_CHANGE_EVENT);
     }

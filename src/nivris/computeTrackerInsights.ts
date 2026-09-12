@@ -9,8 +9,8 @@ import { getMatrixClient } from "../matrixClient";
 import { getMentions, getMessageById, getMessagesSince, searchMessages, type StoredNivrisMessage } from "./NivrisMessageDb";
 import { askNivris, NivrisApiError, type NivrisMessage } from "./NivrisApi";
 import { type NivrisSettings } from "./types";
+import { buildSystemPrompt } from "./outputTemplates";
 import { type NivrisChatMessage, type NivrisUserTracker } from "./NivrisTrackerStore";
-import { type NivrisTaskStatus } from "./NivrisTaskStore";
 import { startOfToday } from "./NivrisIngest";
 import { JOB_TITLE_OPTIONS, PRIORITY_KEYWORDS } from "./constants";
 
@@ -75,7 +75,9 @@ const EMPTY_METRICS: TrackerMetrics = {
     feedGroups: [],
 };
 
-const ROOM_COLORS = ["#0fa3a0", "#c97a22", "#6c5cff", "#2ba95f", "#de3f52"];
+// Element's own decorative ramp — the same six hues it tints usernames and avatars with — so a
+// room reads in the same colour here as it does in the timeline instead of in a private palette.
+const ROOM_COLORS = [1, 2, 3, 4, 5, 6].map((n) => `var(--cpd-color-text-decorative-${n})`);
 
 function relativeTime(ts: number): string {
     const diffMs = Date.now() - ts;
@@ -99,10 +101,7 @@ const PRIORITY_COLORS: TrackerPriorityItem["color"][] = ["blue", "orange", "viol
  * re-querying IndexedDB independently.
  */
 async function findMatches(tracker: NivrisUserTracker, preloaded?: StoredNivrisMessage[]): Promise<StoredNivrisMessage[]> {
-    // TEMP (revert when asked): widened to include yesterday too, purely for testing across a day
-    // boundary. Only matters when preloaded isn't supplied — the normal NivrisWorkspace poll
-    // already passes its own (matching) widened window in directly.
-    const sinceTs = startOfToday() - 24 * 60 * 60 * 1000;
+    const sinceTs = startOfToday();
     const all = preloaded ?? (await getMessagesSince(sinceTs));
 
     // Picked from the entity picker (real userId/roomId) — match exactly instead of by fuzzy name.
@@ -119,6 +118,18 @@ async function findMatches(tracker: NivrisUserTracker, preloaded?: StoredNivrisM
     const keywords = keywordsForTracker(tracker);
     if (!keywords.length) return [];
     return searchMessages(keywords, sinceTs, MAX_MATCHES, all);
+}
+
+/**
+ * Matching for an explicit set of messages rather than "today" — the report screen uses it to
+ * build (or rebuild) a report for any day still held in the local cache, using exactly the same
+ * matching rules the live metrics use.
+ */
+export async function matchesInMessages(
+    tracker: NivrisUserTracker,
+    messages: StoredNivrisMessage[],
+): Promise<StoredNivrisMessage[]> {
+    return findMatches(tracker, messages);
 }
 
 export async function computeTrackerMetrics(tracker: NivrisUserTracker, preloaded?: StoredNivrisMessage[]): Promise<TrackerMetrics> {
@@ -275,13 +286,7 @@ export async function generateTrackerInsights(
         .map((m) => `[${new Date(m.ts).toLocaleString("vi-VN")}] (${m.roomName}) ${m.senderName}: ${m.body}`)
         .join("\n");
 
-    const systemPrompt = [
-        "Bạn là trợ lý N.I.V.R.I.S. đang phân tích các tin nhắn liên quan tới một tracker cụ thể.",
-        "Dựa CHỈ trên transcript được cung cấp (không bịa thông tin ngoài transcript), viết tối đa 8 nhận định, mỗi nhận định 1 dòng, không đánh số.",
-        "Mỗi nhận định nên cụ thể — nêu rõ ai nói gì, ở phòng nào, và thời điểm nếu liên quan — thay vì chỉ tóm tắt chung chung.",
-        "Ưu tiên nêu: các câu hỏi/yêu cầu đang chờ người dùng phản hồi, deadline hoặc mốc thời gian được nhắc tới, việc cần làm (action item) và ai chịu trách nhiệm, các quyết định hoặc thay đổi quan trọng, và bất kỳ mâu thuẫn/vấn đề chưa giải quyết.",
-        "Nếu transcript ít nội dung, ít nhận định hơn cũng được — không thêm nhận định thừa để đủ số lượng.",
-    ].join("\n");
+    const systemPrompt = buildSystemPrompt(settings, "insights", { tracker: `"${tracker.label || tracker.type}"` });
 
     const messages: NivrisMessage[] = [
         { role: "user", content: `Tracker: "${tracker.label || tracker.type}"\n\nTranscript:\n${transcript}` },
@@ -311,12 +316,7 @@ export async function summarizeThread(settings: NivrisSettings, threadMessages: 
         .map((m) => `[${new Date(m.ts).toLocaleString("vi-VN")}] ${m.senderName}: ${m.body}`)
         .join("\n");
 
-    const systemPrompt = [
-        "Bạn là trợ lý N.I.V.R.I.S. đang tóm tắt một thread tin nhắn.",
-        "Đọc TOÀN BỘ transcript được cung cấp (không bịa thông tin ngoài transcript) và viết tối đa 8 gạch đầu dòng bằng tiếng Việt, mỗi dòng 1 ý, không đánh số.",
-        "Ưu tiên nêu: thread đang bàn về chuyện gì, các quyết định/kết luận đã chốt, việc cần làm và ai chịu trách nhiệm, deadline nếu có, và câu hỏi/việc còn chưa được trả lời.",
-        "Nếu transcript ít nội dung, ít gạch đầu dòng hơn cũng được — không thêm ý thừa cho đủ số lượng.",
-    ].join("\n");
+    const systemPrompt = buildSystemPrompt(settings, "thread");
 
     const messages: NivrisMessage[] = [{ role: "user", content: `Transcript:\n${transcript}` }];
 
@@ -419,20 +419,13 @@ export async function generateDailyReport(
               "(deadline bị trễ, việc còn đang chờ, câu hỏi chưa được trả lời — nếu không có gì trễ thì ghi 'Không có việc trễ')",
           ];
 
-    const systemPrompt = [
-        `Bạn là trợ lý N.I.V.R.I.S. đang viết báo cáo cuối ngày cho "${who}" dựa trên tin nhắn của họ hôm nay.`,
-        roleLabel
-            ? `Lưu ý vai trò/vị trí công việc của người này là "${roleLabel}" khi diễn giải nội dung — báo cáo của quản lý thường là chỉ đạo/quyết định, còn báo cáo của nhân viên thường là tiến độ việc được giao.`
-            : "",
-        "Dựa CHỈ trên transcript được cung cấp, không bịa thông tin ngoài transcript.",
-        "Trả lời theo đúng 3 mục sau, mỗi mục là các gạch đầu dòng ngắn gọn, cụ thể (nêu rõ việc gì, ở phòng nào nếu cần):",
-        "",
-        ...sections,
-        "",
-        "Nếu 1 mục không có thông tin trong transcript, ghi 'Không có thông tin' cho mục đó thay vì bỏ trống hoặc bịa ra.",
-    ]
-        .filter(Boolean)
-        .join("\n");
+    // {{role}} is deliberately left undefined when the person has no job title — fillTemplate then
+    // drops that whole line rather than telling the model their role is "undefined".
+    const systemPrompt = buildSystemPrompt(settings, "report", {
+        who: `"${who}"`,
+        role: roleLabel ? `"${roleLabel}"` : undefined,
+        sections: sections.join("\n"),
+    });
 
     const messages: NivrisMessage[] = [{ role: "user", content: `Transcript:\n${transcript}` }];
 
@@ -440,90 +433,6 @@ export async function generateDailyReport(
         return await askNivris(settings, systemPrompt, messages);
     } catch (e) {
         return e instanceof NivrisApiError ? e.message : `Lỗi khi tạo báo cáo: ${e instanceof Error ? e.message : String(e)}`;
-    }
-}
-
-const TASK_STATUSES: NivrisTaskStatus[] = ["todo", "doing", "done", "late"];
-
-export interface ExtractedTask {
-    title: string;
-    status: NivrisTaskStatus;
-    link?: string;
-}
-
-/**
- * Extracts individual task cards for the daily work board from one person's messages today —
- * strict JSON out, so the board can render them as Trello-style cards instead of just prose.
- */
-export async function extractTasksForTracker(
-    tracker: NivrisUserTracker,
-    settings: NivrisSettings,
-    matches: StoredNivrisMessage[],
-): Promise<ExtractedTask[]> {
-    if (!matches.length) return [];
-
-    const employeeMessages = matches.slice(0, MAX_INSIGHT_INPUT_MESSAGES).slice().reverse();
-
-    // Pull in the rest of each thread too (any sender) — a link the task is actually about is
-    // often posted by someone else replying in the same thread, not by the employee themselves.
-    const threadRootIds = new Set(employeeMessages.map((m) => m.threadRootId).filter((id): id is string => !!id));
-    const threadContext: StoredNivrisMessage[] = [];
-    if (threadRootIds.size) {
-        const sinceTs = startOfToday();
-        const all = await getMessagesSince(sinceTs);
-        const employeeIds = new Set(employeeMessages.map((m) => m.id));
-        for (const m of all) {
-            if (m.threadRootId && threadRootIds.has(m.threadRootId) && !employeeIds.has(m.id)) threadContext.push(m);
-        }
-    }
-
-    const transcript = [...employeeMessages, ...threadContext]
-        .sort((a, b) => a.ts - b.ts)
-        .map((m) => `[${new Date(m.ts).toLocaleTimeString("vi-VN")}] (${m.roomName}) ${m.senderName}: ${m.body}`)
-        .join("\n");
-
-    const systemPrompt = [
-        `Trích xuất danh sách công việc CỤ THỂ liên quan tới "${tracker.label}" từ transcript tin nhắn hôm nay bên dưới.`,
-        "Transcript có thể gồm cả tin nhắn của người khác trong cùng thread — dùng để hiểu ngữ cảnh và tìm link liên quan, nhưng công việc trích ra vẫn phải là việc của/liên quan tới " +
-            tracker.label +
-            ".",
-        "PHÂN BIỆT RÕ giữa TRAO ĐỔI (không đưa vào) và VIỆC CẦN LÀM (mới đưa vào):",
-        "- TRAO ĐỔI: hỏi đáp làm rõ yêu cầu, bàn luận/góp ý, cập nhật tình hình chung, chào hỏi, xác nhận đã hiểu, thảo luận ý tưởng chưa chốt — KHÔNG tạo thẻ cho những tin này.",
-        "- VIỆC CẦN LÀM: có một hành động cụ thể được giao/nhận/tự nhận làm (vd 'X làm Y', 'giao cho X việc Y', 'X sẽ Z trước Y giờ'), có deadline được nêu, hoặc một việc được xác nhận đã hoàn thành/bị trễ — CHỈ những tin này mới tạo thẻ.",
-        "Nếu không chắc một đoạn hội thoại có phải là 1 việc cụ thể hay chỉ là trao đổi thông thường, hãy coi đó là trao đổi và KHÔNG tạo thẻ — thà bỏ sót còn hơn tạo thẻ rác từ chat phiếm.",
-        "Gộp các tin nhắn nói về cùng 1 việc thành 1 đầu việc duy nhất.",
-        'Trả về DUY NHẤT một JSON array, không markdown, không giải thích, đúng dạng: [{"title": "...", "status": "todo", "link": "https://..."}, ...]',
-        '"title": tên việc ngắn gọn, cụ thể (tối đa ~15 từ).',
-        '"status" là một trong: "todo" (mới giao, chưa bắt đầu), "doing" (đang làm/đang thảo luận tiến độ), "done" (đã xác nhận xong), "late" (deadline bị trễ/quá hạn).',
-        '"link": URL (Google Docs, Figma, PR, ảnh...) được nhắc tới khi bàn về việc này, do bất kỳ ai gửi trong đoạn hội thoại liên quan. Bỏ field này nếu không có link nào liên quan — không bịa link.',
-        "Nếu không có công việc cụ thể nào, trả về mảng rỗng [].",
-        "",
-        `Transcript:\n${transcript}`,
-    ].join("\n");
-
-    const messages: NivrisMessage[] = [{ role: "user", content: "Trích xuất công việc theo đúng định dạng JSON yêu cầu." }];
-
-    let reply: string;
-    try {
-        reply = await askNivris(settings, systemPrompt, messages);
-    } catch {
-        return [];
-    }
-
-    const jsonMatch = reply.match(/\[[\s\S]*\]/);
-    if (!jsonMatch) return [];
-    try {
-        const parsed = JSON.parse(jsonMatch[0]) as unknown[];
-        return parsed
-            .filter((item): item is { title: unknown; status: unknown; link?: unknown } => typeof item === "object" && item !== null)
-            .map((item) => ({
-                title: typeof item.title === "string" ? item.title.trim() : "",
-                status: TASK_STATUSES.includes(item.status as NivrisTaskStatus) ? (item.status as NivrisTaskStatus) : "todo",
-                link: typeof item.link === "string" && /^https?:\/\//.test(item.link.trim()) ? item.link.trim() : undefined,
-            }))
-            .filter((t) => t.title.length > 0);
-    } catch {
-        return [];
     }
 }
 

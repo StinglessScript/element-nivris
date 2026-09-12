@@ -7,11 +7,16 @@ Please see LICENSE files in the repository root for full details.
 
 import React, { type JSX } from "react";
 
-// A handful of accent colours to hash ids into — same spirit as Element's own avatar colouring,
-// not pixel-identical (that helper lives in apps/web/src, outside the module API surface).
-const PALETTE = ["#5d6ef5", "#2ba95f", "#d98716", "#de3f52", "#7953ef", "#bf4b9f", "#1a9caf"];
+// Hash ids onto Compound's decorative ramp — the same six-hue set Element tints its own avatars
+// and usernames with, so a person keeps one colour across the timeline and this module. Element's
+// own hashing helper lives in apps/web/src, outside the module API surface, so only the palette is
+// shared, not the exact bucket a given id lands in.
+const PALETTE = [1, 2, 3, 4, 5, 6].map((n) => ({
+    bg: `var(--cpd-color-bg-decorative-${n})`,
+    text: `var(--cpd-color-text-decorative-${n})`,
+}));
 
-function colorFor(id: string): string {
+function colorFor(id: string): { bg: string; text: string } {
     let hash = 0;
     for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) | 0;
     return PALETTE[Math.abs(hash) % PALETTE.length];
@@ -31,8 +36,8 @@ const SimpleAvatar: React.FC<IProps> = ({ name, idName, size = "24px", className
             width: size,
             height: size,
             borderRadius: "100%",
-            backgroundColor: colorFor(idName),
-            color: "#fff",
+            backgroundColor: colorFor(idName).bg,
+            color: colorFor(idName).text,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",

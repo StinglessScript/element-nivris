@@ -92,6 +92,22 @@ export async function getMessagesSince(sinceTs: number): Promise<StoredNivrisMes
  * scoring several trackers against the same today's-messages snapshot) to skip a redundant
  * IndexedDB read.
  */
+/**
+ * Lowercased "roomName body" per message, so a refresh that scores N keyword trackers against the
+ * same preloaded array builds each haystack once instead of N times. Keyed by the message object,
+ * so it dies with the array the refresh loaded — no stale text can outlive an edited message.
+ */
+const haystackCache = new WeakMap<StoredNivrisMessage, string>();
+
+function haystackFor(m: StoredNivrisMessage): string {
+    let haystack = haystackCache.get(m);
+    if (haystack === undefined) {
+        haystack = `${m.roomName} ${m.body}`.toLowerCase();
+        haystackCache.set(m, haystack);
+    }
+    return haystack;
+}
+
 export async function searchMessages(
     keywords: string[],
     sinceTs = 0,
@@ -103,7 +119,7 @@ export async function searchMessages(
 
     const all = preloaded ?? (await getMessagesSince(sinceTs));
     const matches = all.filter((m) => {
-        const haystack = `${m.roomName} ${m.body}`.toLowerCase();
+        const haystack = haystackFor(m);
         return lowerKeywords.some((k) => haystack.includes(k));
     });
 

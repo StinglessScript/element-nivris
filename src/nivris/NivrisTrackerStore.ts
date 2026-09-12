@@ -37,9 +37,6 @@ export interface NivrisUserTracker {
     /** Vị trí công việc (job title/role), picked from a fixed list — determines both the label
      * shown alongside the name and which report format the AI uses (manager vs employee). */
     jobTitle?: JobTitleValue;
-    /** Cached AI-generated end-of-day report, filled in on demand from the Report screen. */
-    dailyReport?: string;
-    dailyReportGeneratedAt?: number;
 }
 
 export interface NivrisChatMessage {
@@ -169,12 +166,6 @@ class NivrisTrackerStore extends EventEmitter {
 
     public setJobTitle(id: string, jobTitle: JobTitleValue | undefined): void {
         this.trackers = this.trackers.map((t) => (t.id === id ? { ...t, jobTitle } : t));
-        save(this.trackers);
-        this.emit(NIVRIS_TRACKER_STORE_CHANGE_EVENT);
-    }
-
-    public setDailyReport(id: string, dailyReport: string): void {
-        this.trackers = this.trackers.map((t) => (t.id === id ? { ...t, dailyReport, dailyReportGeneratedAt: Date.now() } : t));
         save(this.trackers);
         this.emit(NIVRIS_TRACKER_STORE_CHANGE_EVENT);
     }

@@ -26,6 +26,17 @@ export interface NivrisSettings {
     reportReminderEnabled: boolean;
     /** 24h "HH:mm" local time. */
     reportReminderTime: string;
+    /**
+     * House rules applied to every generated summary/report, so the three outputs read as one
+     * voice instead of three. Blank = use DEFAULT_OUTPUT_STYLE.
+     */
+    outputStyle: string;
+    /**
+     * Per-output instruction overrides (see outputTemplates.ts). A blank or missing entry falls
+     * back to that output's default template, which is also how "khôi phục mặc định" works.
+     * Optional on the type because settings persisted before this existed won't have it.
+     */
+    outputTemplates?: Partial<Record<"insights" | "thread" | "report", string>>;
 }
 
 export const DEFAULT_NIVRIS_SETTINGS: NivrisSettings = {
@@ -38,6 +49,8 @@ export const DEFAULT_NIVRIS_SETTINGS: NivrisSettings = {
     morningReportReminderTime: "09:00",
     reportReminderEnabled: false,
     reportReminderTime: "17:30",
+    outputStyle: "",
+    outputTemplates: {},
 };
 
 export function isNivrisConfigured(settings: NivrisSettings): boolean {
