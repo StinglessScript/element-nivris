@@ -27,7 +27,7 @@
         "@vector-im/compound-design-tokens": "^10.0.0",
         "@vector-im/compound-web": "^9.0.0",
         "@vitejs/plugin-react": "^6.0.5",
-        "matrix-js-sdk": "github:matrix-org/matrix-js-sdk#develop",
+        "matrix-js-sdk": "^42.3.0",
         "react": "^19.0.0",
         "rollup": "^4.59.0",
         "rollup-plugin-external-globals": "^0.13.0",
