@@ -291,11 +291,26 @@ async function main(): Promise<void> {
             "\n\nLưu ý: không bật được tính năng tự cập nhật trên máy này (xem nhật ký). N.I.V.R.I.S. vẫn dùng bình thường, chỉ là muốn lên bản mới thì phải chạy lại file cài này.";
     }
 
+    // The install just quit Element in order to patch it, so "open it again" is the next thing the
+    // user does either way — offer it as a button rather than an instruction. Electron keeps the
+    // executable one level above resources/ on both platforms; if it isn't there, the button is
+    // simply not offered.
+    const elementExe = path.join(
+        resourcesDir,
+        "..",
+        process.platform === "win32" ? "Element.exe" : "Element",
+    );
+    const launchPath = fs.existsSync(elementExe) ? elementExe : null;
+
     finish(
         TITLE,
         true,
-        "Đã cài đặt N.I.V.R.I.S. thành công!\n\nKiểm tra Element đã tắt hẳn (Task Manager, không còn tiến trình 'Element' — Windows hay ẩn xuống khay hệ thống thay vì thoát), rồi mở lại để bắt đầu dùng." +
+        "Đã cài đặt N.I.V.R.I.S. thành công!" +
+            (launchPath
+                ? "\n\nBấm \"Mở Element\" để mở lại ngay."
+                : "\n\nKiểm tra Element đã tắt hẳn (Task Manager, không còn tiến trình 'Element' — Windows hay ẩn xuống khay hệ thống thay vì thoát), rồi mở lại để bắt đầu dùng.") +
             helperNote,
+        launchPath,
     );
 }
 

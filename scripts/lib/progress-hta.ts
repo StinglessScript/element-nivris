@@ -82,7 +82,8 @@ export const HTA_HTML = String.raw`<!DOCTYPE html>
 <div class="bar" id="bar">
     <button id="btnCopy" onclick="copyLog()">Sao chép nhật ký</button>
     <button id="btnView" onclick="viewLog()">Xem nhật ký</button>
-    <button class="primary" onclick="window.close()">Đóng</button>
+    <button id="btnClose" class="primary" onclick="window.close()">Đóng</button>
+    <button id="btnOpen" class="primary" style="display:none" onclick="openElement()">Mở Element</button>
 </div>
 <div id="logview">
     <div id="logtext"></div>
@@ -91,6 +92,7 @@ export const HTA_HTML = String.raw`<!DOCTYPE html>
 <script type="text/javascript">
 var STATUS_FILE = "__STATUS_FILE__";
 var logPath = "";
+var launchPath = "";
 var fso = new ActiveXObject("Scripting.FileSystemObject");
 
 window.resizeTo(740, 520);
@@ -119,6 +121,15 @@ function markReady() {
         var dir = fso.GetParentFolderName(STATUS_FILE);
         fso.CreateTextFile(fso.BuildPath(dir, "ready.marker"), true).Close();
     } catch (e) {}
+}
+
+function openElement() {
+    try {
+        new ActiveXObject("WScript.Shell").Run('"' + launchPath + '"', 1, false);
+    } catch (e) {
+        alert("Không mở được Element tự động, bạn mở thủ công giúp nhé.");
+    }
+    window.close();
 }
 
 function viewLog() {
@@ -152,6 +163,11 @@ function tick() {
     if (s.done) {
         done = true;
         logPath = s.logPath || "";
+        launchPath = s.launchPath || "";
+        if (s.ok && launchPath) {
+            document.getElementById("btnOpen").style.display = "";
+            document.getElementById("btnClose").className = "";
+        }
         var h = document.getElementById("heading");
         h.innerText = s.ok ? "Đã cài xong" : "Cài đặt gặp lỗi";
         h.className = s.ok ? "ok" : "err";

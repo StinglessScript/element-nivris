@@ -214,7 +214,7 @@ function writeInstallLog(title: string, success: boolean): string | null {
     }
 }
 
-export function finish(title: string, success: boolean, successMessage?: string): never {
+export function finish(title: string, success: boolean, successMessage?: string, launchPath?: string | null): never {
     const logFile = writeInstallLog(title, success);
     if (process.platform === "win32") {
         const body = success ? (successMessage ?? "Hoàn tất.") : logLines.join("\n");
@@ -222,7 +222,7 @@ export function finish(title: string, success: boolean, successMessage?: string)
             // The progress window turns itself into the result dialog (message + log buttons) and
             // stays up on its own after this process exits — no second window to spawn, and nothing
             // that can leave the run with no visible ending.
-            endProgress(success, body, logFile);
+            endProgress(success, body, logFile, success ? launchPath : null);
             sleepSync(200);
         } else if (progressPowerShellUsable()) {
             // Only reached when no progress window was ever started (a run that never called

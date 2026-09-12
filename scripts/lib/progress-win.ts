@@ -23,7 +23,7 @@ import path from "node:path";
 import { HTA_HTML } from "./progress-hta";
 import { LOGO_PNG_BASE64 } from "./logo-base64";
 
-type Status = { percent: number; label: string; done: boolean; ok?: boolean; message?: string; logPath?: string };
+type Status = { percent: number; label: string; done: boolean; ok?: boolean; message?: string; logPath?: string; launchPath?: string };
 
 let statusFile: string | null = null;
 
@@ -111,6 +111,7 @@ $form.Controls.Add($label)
 # Result view, hidden until the run finishes — this window stays up and becomes the ending, rather
 # than handing that job to another process that might never appear.
 $script:LogPath = ''
+$script:LaunchPath = ''
 
 $msg = New-Object System.Windows.Forms.TextBox
 $msg.Multiline = $true
@@ -148,6 +149,20 @@ $btnClose.ForeColor = [System.Drawing.Color]::White
 $btnClose.FlatAppearance.BorderSize = 0
 $btnClose.Add_Click({ $form.Close() })
 
+$btnOpen = New-Object System.Windows.Forms.Button
+$btnOpen.Text = 'Mo Element'
+$btnOpen.Width = 126
+$btnOpen.Height = 32
+$btnOpen.FlatStyle = 'Flat'
+$btnOpen.BackColor = $TEAL
+$btnOpen.ForeColor = [System.Drawing.Color]::White
+$btnOpen.FlatAppearance.BorderSize = 0
+$btnOpen.Visible = $false
+$btnOpen.Add_Click({
+    try { Start-Process -FilePath $script:LaunchPath } catch { }
+    $form.Close()
+})
+
 $btnView = New-Object System.Windows.Forms.Button
 $btnView.Text = 'Xem nhat ky'
 $btnView.Width = 126
@@ -181,7 +196,7 @@ $btnCopy.Add_Click({
     [System.Windows.Forms.MessageBox]::Show('Da sao chep nhat ky vao clipboard.', 'OK') | Out-Null
 })
 
-$panel.Controls.AddRange(@($btnClose, $btnView, $btnCopy))
+$panel.Controls.AddRange(@($btnOpen, $btnClose, $btnView, $btnCopy))
 $form.Controls.Add($panel)
 
 $timer = New-Object System.Windows.Forms.Timer
@@ -198,6 +213,12 @@ $timer.Add_Tick({
     if ($s.done) {
         $timer.Stop()
         $script:LogPath = $s.logPath
+        $script:LaunchPath = $s.launchPath
+        if ($s.ok -and $s.launchPath) {
+            $btnOpen.Visible = $true
+            $btnClose.BackColor = [System.Drawing.Color]::White
+            $btnClose.ForeColor = $INK
+        }
         $track.Visible = $false
         $label.Visible = $false
         $heading.Text = if ($s.ok) { 'Da cai xong' } else { 'Cai dat gap loi' }
@@ -357,6 +378,14 @@ export function progressActive(): boolean {
 }
 
 /** Tells the progress window to show the final message and close. No-op outside Windows. */
-export function endProgress(ok: boolean, message: string, logPath?: string | null): void {
-    writeStatus({ percent: 100, label: "", done: true, ok, message, logPath: logPath ?? undefined });
+export function endProgress(ok: boolean, message: string, logPath?: string | null, launchPath?: string | null): void {
+    writeStatus({
+        percent: 100,
+        label: "",
+        done: true,
+        ok,
+        message,
+        logPath: logPath ?? undefined,
+        launchPath: launchPath ?? undefined,
+    });
 }
