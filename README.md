@@ -12,9 +12,14 @@ retention) as they arrive, and are only sent anywhere when you press
 
 Fully standalone — no element-web monorepo checkout needed to build or install it.
 
+**Trang giới thiệu & tải về: https://stinglessscript.github.io/element-nivris/**
+
 ## Install (không rành dòng lệnh)
 
-Vào trang **[Releases](https://github.com/StinglessScript/element-nivris/releases/latest)** và
+Cách dễ nhất là vào **[trang tải về](https://stinglessscript.github.io/element-nivris/)** và bấm
+nút tải cho hệ điều hành của bạn.
+
+Hoặc vào thẳng trang **[Releases](https://github.com/StinglessScript/element-nivris/releases/latest)** và
 tải file phù hợp — **luôn tải từ trang Releases**, không tải file lẻ qua nút "Raw" trên GitHub
 (cách đó làm mất quyền thực thi của file, double-click sẽ không chạy được).
 
