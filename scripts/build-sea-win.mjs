@@ -25,6 +25,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { execFileSync } from "node:child_process";
+import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 
@@ -124,9 +125,13 @@ fs.mkdirSync(path.dirname(outFile), { recursive: true });
 fs.copyFileSync(process.execPath, outFile);
 
 console.log("[sea] Inject blob vào node.exe…");
+// postject's own CLI entry, run through node — not `npx postject`. Node 20 refuses to spawnSync a
+// .cmd shim without shell:true (the CVE-2024-27980 fix), which is what npx resolves to on Windows,
+// and a pinned dependency beats fetching a floating version mid-build anyway.
+const postjectCli = createRequire(import.meta.url).resolve("postject/dist/cli.js");
 execFileSync(
-    process.platform === "win32" ? "npx.cmd" : "npx",
-    ["--yes", "postject", outFile, "NODE_SEA_BLOB", blobPath, "--sentinel-fuse", "NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2"],
+    process.execPath,
+    [postjectCli, outFile, "NODE_SEA_BLOB", blobPath, "--sentinel-fuse", "NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2"],
     { stdio: "inherit" },
 );
 
