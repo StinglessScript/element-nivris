@@ -9,6 +9,7 @@ import { getMatrixClient } from "../matrixClient";
 import { getMentions, getMessageById, getMessagesSince, searchMessages, type StoredNivrisMessage } from "./NivrisMessageDb";
 import { askNivris, NivrisApiError, type NivrisMessage } from "./NivrisApi";
 import { type NivrisSettings } from "./types";
+import NivrisDoneStore from "./NivrisDoneStore";
 import { buildSystemPrompt } from "./outputTemplates";
 import { type NivrisChatMessage, type NivrisUserTracker } from "./NivrisTrackerStore";
 import { startOfToday } from "./NivrisIngest";
@@ -54,7 +55,7 @@ export interface TrackerMetrics {
     matches: StoredNivrisMessage[];
     total: number;
     roomsCount: number;
-    /** Messages from others, newer than the tracker's lastSeenTs (i.e. since it was last opened). */
+    /** Messages from others not yet marked "đã xem" — the same set the Chưa xem filter shows. */
     unreadCount: number;
     lastActivityTs: number | null;
     priorities: TrackerPriorityItem[];
@@ -140,8 +141,14 @@ export async function computeTrackerMetrics(tracker: NivrisUserTracker, preloade
     const myUserId = getMatrixClient().getUserId();
     const roomIds = new Set(allMatches.map((m) => m.roomId));
 
-    const lastSeenTs = tracker.lastSeenTs ?? 0;
-    const unreadCount = allMatches.filter((m) => m.ts > lastSeenTs && m.sender !== myUserId).length;
+    // Counted off the "đã xem" marks, not a lastSeenTs stamp. There were two different notions of
+    // unread in the app: the badge used "anything since you last clicked this session", while the
+    // Chưa xem / Đã xem filter right above the feed used the per-message marks. Opening a session
+    // silently zeroed the first one, so a feed listing four unseen messages sat under a session with
+    // no badge — reported live. The marks are the one the user actually drives, so the badge follows
+    // them, and "Đã xem tất cả" clears it exactly as it reads.
+    const doneIds = NivrisDoneStore.instance.getAll();
+    const unreadCount = allMatches.filter((m) => m.sender !== myUserId && !doneIds.has(m.id)).length;
 
     const recent = [...matches].sort((a, b) => b.ts - a.ts).slice(0, 4);
     const priorities: TrackerPriorityItem[] = recent.map((m, i) => ({

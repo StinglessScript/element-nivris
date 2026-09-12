@@ -225,7 +225,9 @@ const NivrisWorkspace: React.FC = () => {
             window.clearInterval(intervalId);
             document.removeEventListener("visibilitychange", onVisible);
         };
-    }, [trackers]);
+        // doneIds: the badge counts unmarked messages, so marking one has to recompute the counts
+        // rather than wait out the poll.
+    }, [trackers, doneIds]);
 
     const activeTracker = trackers.find((t) => t.id === activeId) ?? null;
     const activeMetrics = activeTracker ? metricsMap[activeTracker.id] : undefined;
@@ -242,15 +244,6 @@ const NivrisWorkspace: React.FC = () => {
     const visibleFeedGroups = (activeMetrics?.feedGroups ?? [])
         .map((g) => ({ ...g, items: g.items.filter(matchesFeedFilter) }))
         .filter((g) => g.items.length > 0);
-
-    // Same rule as a room in Element: the session you have open doesn't keep an unread badge. The
-    // click that opened it already marked it seen; this is for messages that land while you're
-    // sitting in it.
-    useEffect(() => {
-        if (activeTracker && activeMetrics?.unreadCount) {
-            NivrisTrackerStore.instance.markSeen(activeTracker.id);
-        }
-    }, [activeTracker, activeMetrics?.unreadCount]);
 
     // Keep the room-tab selection valid as metrics load in/change, AND as rooms drop out of the
     // current filter (default to the busiest room still listed). Following the filtered groups is

@@ -30,7 +30,6 @@ export interface NivrisUserTracker {
     chatMessages?: NivrisChatMessage[];
     /** Timestamp of the last time this tracker's feed was viewed — messages newer than this count
      * as unread. Updated whenever the tracker becomes the active session. */
-    lastSeenTs?: number;
     /** Tags this "boss" (person) tracker for inclusion in the daily report tool — any person
      * (employee, manager, etc.), not just literal subordinates. */
     isEmployee?: boolean;
@@ -104,18 +103,6 @@ class NivrisTrackerStore extends EventEmitter {
     public setActive(id: string | null): void {
         if (this.activeId === id) return;
         this.activeId = id;
-        if (id) {
-            this.trackers = this.trackers.map((t) => (t.id === id ? { ...t, lastSeenTs: Date.now() } : t));
-            save(this.trackers);
-        }
-        this.emit(NIVRIS_TRACKER_STORE_CHANGE_EVENT);
-    }
-
-    /** Marks a tracker's messages as seen without changing which one is active — setActive only
-     * does it on a change, so it can't clear a badge for the session already open. */
-    public markSeen(id: string): void {
-        this.trackers = this.trackers.map((t) => (t.id === id ? { ...t, lastSeenTs: Date.now() } : t));
-        save(this.trackers);
         this.emit(NIVRIS_TRACKER_STORE_CHANGE_EVENT);
     }
 

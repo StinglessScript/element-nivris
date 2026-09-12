@@ -1,5 +1,12 @@
 [
     {
+        "version": "1.2.20",
+        "date": "2026-09-12",
+        "changes": [
+            "Badge tin chưa xem giờ đếm đúng số tin đang nằm ở tab Chưa xem, và chỉ hết khi bạn đánh dấu đã xem."
+        ]
+    },
+    {
         "version": "1.2.19",
         "date": "2026-09-12",
         "changes": [
