@@ -42,7 +42,7 @@ if (process.platform !== "win32") {
     process.exit(0);
 }
 
-const file = path.join(os.mkdtempSync(path.join(os.tmpdir(), "nivris-psheck-")), "progress.ps1");
+const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "nivris-psheck-")), "progress.ps1");
 fs.writeFileSync(file, Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(script, "utf8")]));
 
 const res = spawnSync(
