@@ -1,5 +1,12 @@
 [
     {
+        "version": "1.2.17",
+        "date": "2026-09-12",
+        "changes": [
+            "Sửa lỗi phải bấm cập nhật 1-2 lần mới lên bản mới: bản phát hành giờ chỉ công bố phiên bản sau khi tải xong toàn bộ file."
+        ]
+    },
+    {
         "version": "1.2.16",
         "date": "2026-09-12",
         "changes": [

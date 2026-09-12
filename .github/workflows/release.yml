@@ -184,10 +184,19 @@ jobs:
           (cd repo/installers && zip -j ../../dist/Install-Nivris-Mac.zip Install-Nivris-Mac.command)
           (cd repo/installers && zip -j ../../dist/Uninstall-Nivris-Mac.zip Uninstall-Nivris-Mac.command)
 
-      - uses: softprops/action-gh-release@v2
+      # Two steps on purpose. The release NAME carries the commit SHA that every installed copy
+      # polls to decide whether an update exists (NivrisUpdateChecker.fetchLatestSha), and doing
+      # name-and-assets in one call updates the metadata BEFORE the uploads finish — so for a minute
+      # or two the world is told a new version exists while nivris-module.js is still the previous
+      # build. Anyone updating in that window downloads the old module, records the old SHA, and is
+      # told again that an update is available: "phải update 1-2 lần mới lên bản mới", reported by a
+      # real user. Assets go up first under a name with no SHA in it (so no update is advertised
+      # yet), and only then does the name flip.
+      - name: Publish assets
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.0.0
-          name: "N.I.V.R.I.S. installers (v1) — ${{ github.sha }}"
+          name: "N.I.V.R.I.S. installers (v1) — đang xuất bản..."
           body_path: release-notes.md
           make_latest: "true"
           files: |
@@ -202,3 +211,11 @@ jobs:
             dist/Uninstall-Nivris-Windows.bat
             dist/Install-Nivris-Mac.zip
             dist/Uninstall-Nivris-Mac.zip
+
+      # Only now — with every asset in place — does the version everyone polls become the new one.
+      - name: Announce the new version
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.0
+          name: "N.I.V.R.I.S. installers (v1) — ${{ github.sha }}"
+          make_latest: "true"

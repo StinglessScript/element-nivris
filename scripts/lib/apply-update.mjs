@@ -20,21 +20,28 @@ import { findElementResourcesDirWindows } from "./find-element-windows.mjs";
 /** Follows redirects (GitHub's release download URLs 302 to S3) — Node's https module doesn't. */
 export function downloadFile(url, destPath, maxRedirects = 5) {
     return new Promise((resolve, reject) => {
-        const req = https.get(url, { headers: { "user-agent": "nivris-update-helper" } }, (res) => {
-            if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-                res.resume();
-                if (maxRedirects <= 0) return reject(new Error("Quá nhiều redirect."));
-                return resolve(downloadFile(res.headers.location, destPath, maxRedirects - 1));
-            }
-            if (res.statusCode !== 200) {
-                res.resume();
-                return reject(new Error(`Tải thất bại (HTTP ${res.statusCode}): ${url}`));
-            }
-            const file = fs.createWriteStream(destPath);
-            res.pipe(file);
-            file.on("finish", () => file.close(resolve));
-            file.on("error", reject);
-        });
+        // no-cache: these URLs are stable (the release tag never changes, assets are replaced in
+        // place), so any cache between here and GitHub can hand back the previous build's bytes
+        // under the same URL — which looks exactly like an update that didn't take.
+        const req = https.get(
+            url,
+            { headers: { "user-agent": "nivris-update-helper", "cache-control": "no-cache", pragma: "no-cache" } },
+            (res) => {
+                if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+                    res.resume();
+                    if (maxRedirects <= 0) return reject(new Error("Quá nhiều redirect."));
+                    return resolve(downloadFile(res.headers.location, destPath, maxRedirects - 1));
+                }
+                if (res.statusCode !== 200) {
+                    res.resume();
+                    return reject(new Error(`Tải thất bại (HTTP ${res.statusCode}): ${url}`));
+                }
+                const file = fs.createWriteStream(destPath);
+                res.pipe(file);
+                file.on("finish", () => file.close(resolve));
+                file.on("error", reject);
+            },
+        );
         req.on("error", reject);
     });
 }
