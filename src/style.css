@@ -868,9 +868,13 @@ body[class*="cpd-theme-dark"] {
 
 /* ---- Settings panel ---- */
 
-/* ---- Settings dialog ---- */
+/* ---- Modal shell (settings, assistant, report) ---- */
 
-.mx_NivrisSettingsOverlay {
+/* One chrome for every full-screen-ish panel in the workspace: same overlay, same header, same
+   close affordance. They used to take over the main area instead, which meant three different
+   ways of leaving a screen depending on which one you were in. */
+
+.mx_NivrisModalOverlay {
     position: absolute;
     inset: 0;
     z-index: 20;
@@ -880,18 +884,19 @@ body[class*="cpd-theme-dark"] {
     padding: 32px;
     background-color: rgb(0 0 0 / 38%);
 }
-.mx_NivrisSettingsDialog {
+.mx_NivrisModalDialog {
     display: flex;
     flex-direction: column;
     width: min(980px, 100%);
     height: min(680px, 100%);
+    /* The assistant is a chat: it wants the height more than the width. */
     border: 1px solid var(--jv-border);
     border-radius: 12px;
     background-color: var(--jv-surface);
     box-shadow: 0 24px 60px rgb(0 0 0 / 22%);
     overflow: hidden;
 }
-.mx_NivrisSettingsHead {
+.mx_NivrisModalHead {
     flex-shrink: 0;
     display: flex;
     align-items: center;
@@ -900,8 +905,8 @@ body[class*="cpd-theme-dark"] {
     padding: 0 14px 0 18px;
     border-bottom: 1px solid var(--jv-border);
 }
-.mx_NivrisSettingsTitle { font: 500 11px var(--jv-mono); letter-spacing: 0.18em; color: var(--jv-ink); }
-.mx_NivrisSettingsClose {
+.mx_NivrisModalTitle { font: 500 11px var(--jv-mono); letter-spacing: 0.18em; color: var(--jv-ink); }
+.mx_NivrisModalClose {
     appearance: none;
     display: flex;
     align-items: center;
@@ -914,9 +919,12 @@ body[class*="cpd-theme-dark"] {
     color: var(--jv-muted);
     cursor: pointer;
 }
-.mx_NivrisSettingsClose:hover { background-color: var(--jv-hover); color: var(--jv-ink); }
+.mx_NivrisModalClose:hover { background-color: var(--jv-hover); color: var(--jv-ink); }
 
-.mx_NivrisSettingsBody { flex: 1; min-height: 0; display: flex; }
+.mx_NivrisModalBody { flex: 1; min-height: 0; display: flex; }
+/* Panels with no tab rail get the whole body, scrolling inside themselves. */
+.mx_NivrisModalBody_plain { flex-direction: column; overflow: hidden; }
+.mx_NivrisModalBody_plain > * { flex: 1; min-height: 0; overflow-y: auto; padding: 18px 22px; }
 .mx_NivrisSettingsTabs {
     flex-shrink: 0;
     width: 168px;

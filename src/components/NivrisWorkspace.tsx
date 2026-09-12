@@ -379,7 +379,7 @@ const NivrisWorkspace: React.FC = () => {
                 </span>
                 <div className="mx_NivrisWorkspace_headerActions">
                     <button
-                        className={`mx_NivrisWorkspace_iconBtn ${!activeId && !reportOpen && !assistantOpen ? "mx_NivrisWorkspace_iconBtn_active" : ""}`}
+                        className={`mx_NivrisWorkspace_iconBtn ${!activeId ? "mx_NivrisWorkspace_iconBtn_active" : ""}`}
                         title="Về Home"
                         onClick={() => {
                             NivrisTrackerStore.instance.setActive(null);
@@ -502,21 +502,7 @@ const NivrisWorkspace: React.FC = () => {
                 </aside>
 
                 <div className="mx_NivrisWorkspace_main">
-                    {assistantOpen ? (
-                        <AssistantView
-                            chat={assistantChat}
-                            input={assistantInput}
-                            onInputChange={setAssistantInput}
-                            sending={assistantSending}
-                            onSend={(q) => void onSendAssistant(q)}
-                            configured={isNivrisConfigured(settings)}
-                            onOpenSettings={() => { setAssistantOpen(false); setSettingsOpen(true); }}
-                            onClear={() => setAssistantChat([])}
-                        />
-                    ) : reportOpen ? (
-                        <ReportView trackers={trackers} settings={settings} onOpenSettings={() => { setReportOpen(false); setSettingsOpen(true); }} />
-                    ) : (
-                        <>
+                    <>
                             <div className="mx_NivrisWorkspace_mainHead">
                                 <div>
                                     <div className="mx_NivrisWorkspace_mainHeadName">
@@ -729,12 +715,10 @@ const NivrisWorkspace: React.FC = () => {
                                     </>
                                 )}
                             </div>
-                        </>
-                    )}
-
+                    </>
                 </div>
 
-                {activeTracker && !reportOpen && !assistantOpen && (
+                {activeTracker && (
                     <SessionInspector
                         tracker={activeTracker}
                         metrics={activeMetrics}
@@ -753,6 +737,31 @@ const NivrisWorkspace: React.FC = () => {
                     />
                 )}
             </div>
+
+            {assistantOpen && (
+                <NivrisModal title="TRỢ LÝ AI" onClose={() => setAssistantOpen(false)}>
+                    <AssistantView
+                        chat={assistantChat}
+                        input={assistantInput}
+                        onInputChange={setAssistantInput}
+                        sending={assistantSending}
+                        onSend={(q) => void onSendAssistant(q)}
+                        configured={isNivrisConfigured(settings)}
+                        onOpenSettings={() => { setAssistantOpen(false); setSettingsOpen(true); }}
+                        onClear={() => setAssistantChat([])}
+                    />
+                </NivrisModal>
+            )}
+
+            {reportOpen && (
+                <NivrisModal title="BÁO CÁO CUỐI NGÀY" onClose={() => setReportOpen(false)}>
+                    <ReportView
+                        trackers={trackers}
+                        settings={settings}
+                        onOpenSettings={() => { setReportOpen(false); setSettingsOpen(true); }}
+                    />
+                </NivrisModal>
+            )}
 
             {settingsOpen && (
                 <SettingsPanel
@@ -1651,6 +1660,39 @@ function installLogPath(): string {
         : "~/Library/Application Support/Nivris/bao-cao-cai-dat.txt";
 }
 
+/** The shell every workspace panel is presented in: dim backdrop, titled header, one close
+ * affordance. Click-outside and Escape both close it; a click inside must not bubble out to the
+ * backdrop and close it mid-edit. */
+const NivrisModal: React.FC<{
+    title: string;
+    onClose: () => void;
+    /** Panels with their own left rail (settings) manage the body themselves. */
+    plainBody?: boolean;
+    children: React.ReactNode;
+}> = ({ title, onClose, plainBody = true, children }) => {
+    useEffect(() => {
+        const onKey = (e: KeyboardEvent): void => {
+            if (e.key === "Escape") onClose();
+        };
+        window.addEventListener("keydown", onKey);
+        return () => window.removeEventListener("keydown", onKey);
+    }, [onClose]);
+
+    return (
+        <div className="mx_NivrisModalOverlay" onClick={onClose}>
+            <div className="mx_NivrisModalDialog" onClick={(e) => e.stopPropagation()}>
+                <div className="mx_NivrisModalHead">
+                    <span className="mx_NivrisModalTitle">{title}</span>
+                    <button className="mx_NivrisModalClose" title="Đóng" onClick={onClose}>
+                        <CloseIcon width="16px" height="16px" />
+                    </button>
+                </div>
+                <div className={`mx_NivrisModalBody ${plainBody ? "mx_NivrisModalBody_plain" : ""}`}>{children}</div>
+            </div>
+        </div>
+    );
+};
+
 type SettingsTab = "ai" | "notif" | "data" | "system";
 
 const SettingsPanel: React.FC<{
@@ -1749,15 +1791,6 @@ const SettingsPanel: React.FC<{
 
     useEffect(refreshStorage, []);
 
-    // Escape closes, like every other dialog in Element.
-    useEffect(() => {
-        const onKey = (e: KeyboardEvent): void => {
-            if (e.key === "Escape") onClose();
-        };
-        window.addEventListener("keydown", onKey);
-        return () => window.removeEventListener("keydown", onKey);
-    }, [onClose]);
-
     // Every tab writes through on change — the AI tab's text fields just do it on a debounce so a
     // save isn't fired per keystroke. No save button anywhere, which is also why nothing in this
     // dialog can be "lost by closing it".
@@ -1806,18 +1839,8 @@ const SettingsPanel: React.FC<{
     ];
 
     return (
-        // Click-outside and Escape both close; the inner stopPropagation keeps a click inside the
-        // dialog from bubbling out to the backdrop and closing it mid-edit.
-        <div className="mx_NivrisSettingsOverlay" onClick={onClose}>
-            <div className="mx_NivrisSettingsDialog" onClick={(e) => e.stopPropagation()}>
-                <div className="mx_NivrisSettingsHead">
-                    <span className="mx_NivrisSettingsTitle">CÀI ĐẶT</span>
-                    <button className="mx_NivrisSettingsClose" title="Đóng" onClick={onClose}>
-                        <CloseIcon width="16px" height="16px" />
-                    </button>
-                </div>
-
-                <div className="mx_NivrisSettingsBody">
+        <NivrisModal title="CÀI ĐẶT" onClose={onClose} plainBody={false}>
+            <>
                     <nav className="mx_NivrisSettingsTabs">
                         {tabs.map((t) => (
                             <button
@@ -2172,13 +2195,8 @@ const SettingsPanel: React.FC<{
                             </div>
                         )}
                     </div>
-                </div>
-
-                {/* One footer save for the whole dialog: the AI tab and the ĐẦU RA tab both edit
-                    fields that only land on save, and splitting the button per tab made it look
-                    like switching tabs would discard the other tab's edits. */}
-            </div>
-        </div>
+            </>
+        </NivrisModal>
     );
 };
 
