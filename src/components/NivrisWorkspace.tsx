@@ -1642,6 +1642,15 @@ function formatBytes(bytes: number): string {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+/** Where scripts/lib/finish.ts writes the combined install + helper report. Kept in sync by hand
+ * with that file — the module can't ask the installer, and hardcoding the one path it uses beats
+ * showing nothing. */
+function installLogPath(): string {
+    return navigator.userAgent.includes("Windows")
+        ? "%APPDATA%\\Nivris\\bao-cao-cai-dat.txt"
+        : "~/Library/Application Support/Nivris/bao-cao-cai-dat.txt";
+}
+
 type SettingsTab = "ai" | "notif" | "data" | "system";
 
 const SettingsPanel: React.FC<{
@@ -1670,6 +1679,7 @@ const SettingsPanel: React.FC<{
     const [scanningNow, setScanningNow] = useState(false);
     const [scanResult, setScanResult] = useState<string[] | null>(null);
     const [installedSha, setInstalledSha] = useState<string | null | "loading">("loading");
+    const [logPathCopied, setLogPathCopied] = useState(false);
     const [checkingUpdate, setCheckingUpdate] = useState(false);
     const [updateCheckResult, setUpdateCheckResult] = useState<string | null>(null);
     // Notes for the version you'd be installing, shown only once a check actually finds one —
@@ -2101,6 +2111,29 @@ const SettingsPanel: React.FC<{
                                     {checkingUpdate ? "ĐANG KIỂM TRA..." : "KIỂM TRA CẬP NHẬT NGAY"}
                                 </button>
                                 {updateCheckResult && <span className="mx_NivrisWorkspace_settingsSavedNote">{updateCheckResult}</span>}
+                            </div>
+
+                            {/* This module runs in Element's renderer and has no filesystem access —
+                                that's the whole reason the helper exists — so it cannot show the log
+                                itself. What it can do is hand over the path without anyone having to
+                                type it, which matters on a machine whose keyboard is broken: copy
+                                here, right-click → Paste into Explorer/Finder. */}
+                            <div className="mx_NivrisWorkspace_settingsNote" style={{ marginTop: 10 }}>
+                                Nhật ký cài đặt + helper:
+                                <code className="mx_NivrisWorkspace_logPath">{installLogPath()}</code>
+                                <button
+                                    className="mx_NivrisWorkspace_settingsReset"
+                                    onClick={() => {
+                                        void navigator.clipboard.writeText(installLogPath());
+                                        setLogPathCopied(true);
+                                        window.setTimeout(() => setLogPathCopied(false), 2500);
+                                    }}
+                                >
+                                    {logPathCopied ? "Đã chép" : "Sao chép đường dẫn"}
+                                </button>
+                                <br />
+                                Trình cài đặt cũng có nút "Xem nhật ký" / "Sao chép nhật ký" ở hộp thoại
+                                khi chạy xong — đó là cách xem nhanh nhất khi helper không chạy.
                             </div>
 
                             {availableRelease && (

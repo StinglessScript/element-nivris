@@ -185,13 +185,16 @@ export function finish(title: string, success: boolean, successMessage?: string)
     const logFile = writeInstallLog(title, success);
     if (process.platform === "win32") {
         const body = success ? (successMessage ?? "Hoàn tất.") : logLines.join("\n");
-        // Tell the progress window to close first — the result dialog below replaces the MessageBox
-        // it used to show, so the two would otherwise fight over the foreground.
         if (progressActive()) {
-            endProgress(success, body);
-            sleepSync(150);
+            // The progress window turns itself into the result dialog (message + log buttons) and
+            // stays up on its own after this process exits — no second window to spawn, and nothing
+            // that can leave the run with no visible ending.
+            endProgress(success, body, logFile);
+            sleepSync(200);
+        } else {
+            // Only reached when the progress window never came up (PowerShell blocked, etc.).
+            showResultWindow(title, body, !success, logFile);
         }
-        showResultWindow(title, body, !success, logFile);
     } else {
         console.log("\nNhấn phím bất kỳ để đóng cửa sổ này...");
         try {

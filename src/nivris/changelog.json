@@ -1,5 +1,13 @@
 [
     {
+        "version": "1.2.6",
+        "date": "2026-09-12",
+        "changes": [
+            "Cửa sổ tiến độ tự biến thành hộp thoại kết quả kèm nút Xem nhật ký — không còn trường hợp chạy xong mà không có gì báo.",
+            "Cài đặt → Hệ thống hiện đường dẫn nhật ký kèm nút sao chép, dùng khi helper cập nhật không chạy."
+        ]
+    },
+    {
         "version": "1.2.5",
         "date": "2026-09-12",
         "changes": [

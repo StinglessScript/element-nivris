@@ -20,7 +20,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-type Status = { percent: number; label: string; done: boolean; ok?: boolean; message?: string };
+type Status = { percent: number; label: string; done: boolean; ok?: boolean; message?: string; logPath?: string };
 
 let statusFile: string | null = null;
 
@@ -52,6 +52,76 @@ $bar.Minimum = 0
 $bar.Maximum = 100
 $form.Controls.Add($bar)
 
+# The result view, built up front and hidden: this window is already on screen and already owns the
+# foreground, so turning IT into the result dialog is what guarantees the user sees an ending. An
+# earlier version handed that job to a second process the installer spawned on its way out, and when
+# that failed to appear there was nothing at all to say the run had finished.
+$script:LogPath = ''
+
+$msg = New-Object System.Windows.Forms.TextBox
+$msg.Multiline = $true
+$msg.ReadOnly = $true
+$msg.ScrollBars = 'Vertical'
+$msg.BorderStyle = 'None'
+$msg.BackColor = [System.Drawing.Color]::White
+$msg.SetBounds(24, 20, 560, 150)
+$msg.Visible = $false
+$form.Controls.Add($msg)
+
+function Read-Log {
+    if ([string]::IsNullOrEmpty($script:LogPath)) { return 'Khong co duong dan nhat ky.' }
+    if (-not (Test-Path $script:LogPath)) { return "Chua co file: $script:LogPath" }
+    try { return [System.IO.File]::ReadAllText($script:LogPath, [System.Text.Encoding]::UTF8) }
+    catch { return "Khong doc duoc: $script:LogPath" }
+}
+
+$panel = New-Object System.Windows.Forms.FlowLayoutPanel
+$panel.Dock = 'Bottom'
+$panel.Height = 48
+$panel.FlowDirection = 'RightToLeft'
+$panel.Padding = New-Object System.Windows.Forms.Padding(8, 8, 8, 8)
+$panel.Visible = $false
+
+$btnClose = New-Object System.Windows.Forms.Button
+$btnClose.Text = 'Dong'
+$btnClose.Width = 96
+$btnClose.Height = 30
+$btnClose.Add_Click({ $form.Close() })
+
+$btnView = New-Object System.Windows.Forms.Button
+$btnView.Text = 'Xem nhat ky'
+$btnView.Width = 120
+$btnView.Height = 30
+$btnView.Add_Click({
+    $w = New-Object System.Windows.Forms.Form
+    $w.Text = 'Nhat ky cai dat'
+    $w.Width = 900
+    $w.Height = 620
+    $w.StartPosition = 'CenterScreen'
+    $box = New-Object System.Windows.Forms.TextBox
+    $box.Multiline = $true
+    $box.ReadOnly = $true
+    $box.ScrollBars = 'Both'
+    $box.WordWrap = $false
+    $box.Dock = 'Fill'
+    $box.Font = New-Object System.Drawing.Font('Consolas', 9.5)
+    $box.Text = (Read-Log)
+    $w.Controls.Add($box)
+    [void]$w.ShowDialog()
+})
+
+$btnCopy = New-Object System.Windows.Forms.Button
+$btnCopy.Text = 'Sao chep nhat ky'
+$btnCopy.Width = 140
+$btnCopy.Height = 30
+$btnCopy.Add_Click({
+    [System.Windows.Forms.Clipboard]::SetText((Read-Log))
+    [System.Windows.Forms.MessageBox]::Show('Da sao chep nhat ky vao clipboard.', 'OK') | Out-Null
+})
+
+$panel.Controls.AddRange(@($btnClose, $btnView, $btnCopy))
+$form.Controls.Add($panel)
+
 $timer = New-Object System.Windows.Forms.Timer
 $timer.Interval = 100
 $timer.Add_Tick({
@@ -63,11 +133,16 @@ $timer.Add_Tick({
     $bar.Value = [Math]::Min([Math]::Max([int]$s.percent, 0), 100)
     $label.Text = $s.label
     if ($s.done) {
-        # The result dialog is shown by the installer process itself (see finish.ts's
-        # showResultWindow) so it can carry a "Xem nhat ky" button a MessageBox could never have.
-        # This window's only remaining job is to get out of the way.
         $timer.Stop()
-        $form.Close()
+        $script:LogPath = $s.logPath
+        $label.Visible = $false
+        $bar.Visible = $false
+        $form.Text = if ($s.ok) { $Title } else { "$Title - Loi" }
+        $form.ClientSize = New-Object System.Drawing.Size(608, 230)
+        $msg.Text = $s.message
+        $msg.Visible = $true
+        $panel.Visible = $true
+        $form.Activate()
     }
 })
 $timer.Start()
@@ -173,6 +248,6 @@ export function progressActive(): boolean {
 }
 
 /** Tells the progress window to show the final message and close. No-op outside Windows. */
-export function endProgress(ok: boolean, message: string): void {
-    writeStatus({ percent: 100, label: "", done: true, ok, message });
+export function endProgress(ok: boolean, message: string, logPath?: string | null): void {
+    writeStatus({ percent: 100, label: "", done: true, ok, message, logPath: logPath ?? undefined });
 }
