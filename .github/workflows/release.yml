@@ -99,6 +99,13 @@ jobs:
           NIVRIS_UPDATE_TOKEN: __NIVRIS_TOKEN_PLACEHOLDER__
           NIVRIS_UPDATE_PORT: "47291"
 
+      # The progress window's PowerShell runs hidden, detached, from a GUI-subsystem exe — three
+      # layers that each swallow output, so a syntax error in it shows up as "no window appeared"
+      # and nothing else. Shipped exactly that way once. Parse it here, where a Windows PowerShell
+      # is available to do it.
+      - name: Check the progress window script parses
+        run: node scripts/check-progress-ps.mjs
+
       - name: Compile installer.exe
         run: node scripts/build-sea-win.mjs scripts/standalone-installer.ts dist/NivrisInstaller-Windows.exe
         env:
