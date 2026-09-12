@@ -80,12 +80,21 @@ async function fetchHelperStatus(): Promise<HelperStatus | null> {
     }
 }
 
+export interface NivrisReleaseEntry {
+    version: string;
+    date: string;
+    changes: string[];
+}
+
 export interface NivrisAvailableRelease {
     sha: string;
     /** Missing on releases published before the notes were embedded. */
     version?: string;
     date?: string;
     changes?: string[];
+    /** The full changelog, newest first — so a build several versions behind can be shown every
+     * entry it skipped, not just the newest one. Missing on older releases. */
+    entries?: NivrisReleaseEntry[];
 }
 
 /** The notes for the update, parsed out of the release body's machine-readable block (written by
@@ -97,16 +106,28 @@ export function getCachedAvailableRelease(): NivrisAvailableRelease | null {
     return latestReleaseCache;
 }
 
-function parseReleaseNotes(body: unknown): Pick<NivrisAvailableRelease, "version" | "date" | "changes"> {
+function asEntry(value: unknown): NivrisReleaseEntry | null {
+    if (typeof value !== "object" || value === null) return null;
+    const { version, date, changes } = value as { version?: unknown; date?: unknown; changes?: unknown };
+    if (typeof version !== "string" || typeof date !== "string" || !Array.isArray(changes)) return null;
+    return { version, date, changes: changes.filter((c): c is string => typeof c === "string") };
+}
+
+function parseReleaseNotes(body: unknown): Pick<NivrisAvailableRelease, "version" | "date" | "changes" | "entries"> {
     if (typeof body !== "string") return {};
     const match = /<!--\s*nivris-release-json\s*([\s\S]*?)-->/.exec(body);
     if (!match) return {};
     try {
-        const parsed = JSON.parse(match[1].trim()) as { version?: unknown; date?: unknown; changes?: unknown };
+        const parsed = JSON.parse(match[1].trim()) as { entries?: unknown };
+        const latest = asEntry(parsed);
+        const entries = Array.isArray(parsed.entries)
+            ? parsed.entries.map(asEntry).filter((e): e is NivrisReleaseEntry => e !== null)
+            : undefined;
         return {
-            version: typeof parsed.version === "string" ? parsed.version : undefined,
-            date: typeof parsed.date === "string" ? parsed.date : undefined,
-            changes: Array.isArray(parsed.changes) ? parsed.changes.filter((c): c is string => typeof c === "string") : undefined,
+            version: latest?.version,
+            date: latest?.date,
+            changes: latest?.changes,
+            entries,
         };
     } catch {
         return {};

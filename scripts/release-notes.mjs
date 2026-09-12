@@ -39,13 +39,18 @@ if (latest.version !== version) {
     process.exit(1);
 }
 
+// The machine-readable block carries the WHOLE changelog, not just this release's entry. Someone
+// who skipped two or three versions has to be shown what they skipped — the app filters to
+// everything newer than the version it was built as, and it can only do that if the entries are
+// there to filter. The markdown above it stays as the newest entry, since that's what a person
+// opening the release page came for.
 const lines = [
     `## v${latest.version} — ${latest.date}`,
     "",
     ...latest.changes.map((c) => `- ${c}`),
     "",
     "<!-- nivris-release-json",
-    JSON.stringify(latest),
+    JSON.stringify({ ...latest, entries: releases }),
     "-->",
 ];
 process.stdout.write(lines.join("\n") + "\n");

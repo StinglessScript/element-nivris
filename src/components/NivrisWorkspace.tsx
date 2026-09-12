@@ -116,6 +116,18 @@ function groupKeyFor(tracker: NivrisUserTracker): string {
     return tracker.type === "mention" || tracker.type === "priority" ? "CỐ ĐỊNH" : tracker.type === "group" ? "PHÒNG" : "NGƯỜI";
 }
 
+/** Compares "x.y.z" strings numerically, so 1.2.10 sorts above 1.2.9 the way a string compare
+ * would not. Used to work out which releases a build has missed. */
+function compareVersions(a: string, b: string): number {
+    const pa = a.split(".").map((n) => Number.parseInt(n, 10) || 0);
+    const pb = b.split(".").map((n) => Number.parseInt(n, 10) || 0);
+    for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+        const diff = (pa[i] ?? 0) - (pb[i] ?? 0);
+        if (diff !== 0) return diff;
+    }
+    return 0;
+}
+
 /**
  * Cheap "did anything a screen can show actually change" fingerprint for a metrics map. Deliberately
  * only the fields the UI renders off (counts plus the newest matched message per tracker) — a deep
@@ -2148,31 +2160,55 @@ const SettingsPanel: React.FC<{
                             </div>
 
 
-                            {availableRelease && (
-                                <div className="mx_NivrisWorkspace_changelog">
-                                    <div className="mx_NivrisWorkspace_changelogHead">
-                                        <span className="mx_NivrisWorkspace_changelogVersion">
-                                            {availableRelease.version ? `v${availableRelease.version}` : "Bản mới"}
-                                        </span>
-                                        <span className="mx_NivrisWorkspace_changelogCurrent">SẮP CÀI</span>
-                                        {availableRelease.date && (
-                                            <span className="mx_NivrisWorkspace_changelogDate">{availableRelease.date}</span>
+                            {availableRelease && (() => {
+                                // Everything released since this build, not just the newest entry: a
+                                // machine three versions behind is deciding whether to update, and
+                                // the two versions in between are part of that answer.
+                                const skipped = (availableRelease.entries ?? []).filter(
+                                    (e) => compareVersions(e.version, NIVRIS_VERSION) > 0,
+                                );
+                                const shown = skipped.length
+                                    ? skipped
+                                    : [
+                                          {
+                                              version: availableRelease.version ?? "",
+                                              date: availableRelease.date ?? "",
+                                              changes: availableRelease.changes ?? [],
+                                          },
+                                      ];
+                                return (
+                                    <div className="mx_NivrisWorkspace_changelog">
+                                        {skipped.length > 1 && (
+                                            <div className="mx_NivrisWorkspace_settingsNote">
+                                                Bạn đang ở v{NIVRIS_VERSION} — có {skipped.length} bản mới kể từ đó:
+                                            </div>
                                         )}
+                                        {shown.map((entry, idx) => (
+                                            <section className="mx_NivrisWorkspace_changelogRelease" key={entry.version || idx}>
+                                                <div className="mx_NivrisWorkspace_changelogHead">
+                                                    <span className="mx_NivrisWorkspace_changelogVersion">
+                                                        {entry.version ? `v${entry.version}` : "Bản mới"}
+                                                    </span>
+                                                    {idx === 0 && <span className="mx_NivrisWorkspace_changelogCurrent">SẮP CÀI</span>}
+                                                    {entry.date && <span className="mx_NivrisWorkspace_changelogDate">{entry.date}</span>}
+                                                </div>
+                                                {entry.changes.length ? (
+                                                    <ul className="mx_NivrisWorkspace_changelogList">
+                                                        {entry.changes.map((line, i) => (
+                                                            <li key={i}>{line}</li>
+                                                        ))}
+                                                    </ul>
+                                                ) : (
+                                                    <div className="mx_NivrisWorkspace_settingsNote">
+                                                        Bản này không kèm mô tả thay đổi (phát hành trước khi có tính năng
+                                                        ghi chú bản phát hành).
+                                                    </div>
+                                                )}
+                                            </section>
+                                        ))}
                                     </div>
-                                    {availableRelease.changes?.length ? (
-                                        <ul className="mx_NivrisWorkspace_changelogList">
-                                            {availableRelease.changes.map((line, i) => (
-                                                <li key={i}>{line}</li>
-                                            ))}
-                                        </ul>
-                                    ) : (
-                                        <div className="mx_NivrisWorkspace_settingsNote">
-                                            Bản này không kèm mô tả thay đổi (phát hành trước khi có tính năng ghi chú
-                                            bản phát hành).
-                                        </div>
-                                    )}
-                                </div>
-                            )}
+                                );
+                            })()}
                         </div>
 
 
