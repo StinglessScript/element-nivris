@@ -1,5 +1,13 @@
 [
     {
+        "version": "1.2.14",
+        "date": "2026-09-12",
+        "changes": [
+            "Bỏ phần 'người đang chờ bạn' — nó đếm mọi phòng có người nói sau bạn, kể cả phòng không ai nhắc tới bạn.",
+            "Trang chủ đổi ô số lớn sang tin hôm nay, kèm số phòng đang nghe và giờ cao điểm."
+        ]
+    },
+    {
         "version": "1.2.13",
         "date": "2026-09-12",
         "changes": [

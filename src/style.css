@@ -1121,7 +1121,6 @@ body[class*="cpd-theme-dark"] {
     border-radius: 5px;
     padding: 10px 11px;
 }
-.mx_NivrisWorkspace_homeMiniStat_warn { border-color: rgb(var(--jv-amber-rgb) / 22%); background-color: transparent; }
 .mx_NivrisWorkspace_homeMiniStat_warn .mx_NivrisWorkspace_statLabel { color: var(--jv-amber-text); }
 .mx_NivrisWorkspace_homeMiniNum { margin-top: 4px; font: 600 22px var(--jv-mono); color: var(--jv-ink); }
 .mx_NivrisWorkspace_homeMiniStat_warn .mx_NivrisWorkspace_homeMiniNum { color: var(--jv-amber); }
@@ -1155,25 +1154,7 @@ body[class*="cpd-theme-dark"] {
 
 .mx_NivrisWorkspace_homeSplit { flex: 1; min-height: 0; display: flex; gap: 26px; margin-top: 12px; }
 .mx_NivrisWorkspace_homeSplit > div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 9px; overflow-y: auto; }
-.mx_NivrisWorkspace_homeWaiters { max-width: 260px; }
 
-.mx_NivrisWorkspace_homeWaiterRow { display: flex; align-items: center; gap: 10px; }
-.mx_NivrisWorkspace_homeWaiterInitial {
-    width: 26px;
-    height: 26px;
-    flex-shrink: 0;
-    border-radius: 4px;
-    border: 1px solid var(--jv-border-strong);
-    background-color: var(--jv-hover);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font: 500 10px var(--jv-mono);
-    color: var(--jv-teal);
-}
-.mx_NivrisWorkspace_homeWaiterName { flex: 1; min-width: 0; font: 400 11.5px var(--jv-sans); color: var(--jv-body); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.mx_NivrisWorkspace_homeWaiterAgo { font: 400 9.5px var(--jv-mono); color: var(--jv-muted); flex-shrink: 0; }
-.mx_NivrisWorkspace_homeWaiterAgo_warn { color: var(--jv-amber); }
 
 /* ---- Session inspector (right panel) ---- */
 

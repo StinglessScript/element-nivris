@@ -54,7 +54,6 @@ export interface TrackerMetrics {
     matches: StoredNivrisMessage[];
     total: number;
     roomsCount: number;
-    awaitingReply: number;
     /** Messages from others, newer than the tracker's lastSeenTs (i.e. since it was last opened). */
     unreadCount: number;
     lastActivityTs: number | null;
@@ -67,7 +66,6 @@ const EMPTY_METRICS: TrackerMetrics = {
     matches: [],
     total: 0,
     roomsCount: 0,
-    awaitingReply: 0,
     unreadCount: 0,
     lastActivityTs: null,
     priorities: [],
@@ -138,14 +136,6 @@ export async function computeTrackerMetrics(tracker: NivrisUserTracker, preloade
 
     const myUserId = getMatrixClient().getUserId();
     const roomIds = new Set(matches.map((m) => m.roomId));
-
-    // "Awaiting reply": rooms where the most recent matched message wasn't sent by me.
-    const latestByRoom = new Map<string, StoredNivrisMessage>();
-    for (const m of matches) {
-        const current = latestByRoom.get(m.roomId);
-        if (!current || m.ts > current.ts) latestByRoom.set(m.roomId, m);
-    }
-    const awaitingReply = Array.from(latestByRoom.values()).filter((m) => m.sender !== myUserId).length;
 
     const lastSeenTs = tracker.lastSeenTs ?? 0;
     const unreadCount = matches.filter((m) => m.ts > lastSeenTs && m.sender !== myUserId).length;
@@ -258,7 +248,6 @@ export async function computeTrackerMetrics(tracker: NivrisUserTracker, preloade
         matches,
         total: matches.length,
         roomsCount: roomIds.size,
-        awaitingReply,
         unreadCount,
         lastActivityTs: recent[0]?.ts ?? null,
         priorities,
@@ -436,8 +425,6 @@ export async function generateDailyReport(
     }
 }
 
-const OVERDUE_MS = 4 * 60 * 60 * 1000;
-
 export interface HomeHourBucket {
     hour: number;
     label: string;
@@ -451,12 +438,6 @@ export interface HomeBusyRoom {
     count: number;
 }
 
-export interface HomeWaiter {
-    senderName: string;
-    roomName: string;
-    ts: number;
-    overdue: boolean;
-}
 
 export interface HomeOverview {
     totalToday: number;
@@ -464,8 +445,6 @@ export interface HomeOverview {
     peakHourLabel: string | null;
     hours: HomeHourBucket[];
     busyRooms: HomeBusyRoom[];
-    waiters: HomeWaiter[];
-    overdueCount: number;
 }
 
 /**
@@ -504,16 +483,6 @@ export async function computeHomeOverview(): Promise<HomeOverview> {
 
     const peak = hourBuckets.reduce((best, h) => (h.total > best.total ? h : best), hourBuckets[0]);
 
-    const waiters: HomeWaiter[] = Array.from(latestByRoom.values())
-        .filter((m) => m.sender !== myUserId)
-        .sort((a, b) => a.ts - b.ts)
-        .map((m) => ({
-            senderName: m.senderName,
-            roomName: m.roomName,
-            ts: m.ts,
-            overdue: Date.now() - m.ts > OVERDUE_MS,
-        }));
-
     return {
         totalToday: todayMessages.length,
         roomsListening,
@@ -522,7 +491,5 @@ export async function computeHomeOverview(): Promise<HomeOverview> {
         busyRooms: Array.from(roomCounts.values())
             .sort((a, b) => b.count - a.count)
             .slice(0, 5),
-        waiters: waiters.slice(0, 6),
-        overdueCount: waiters.filter((w) => w.overdue).length,
     };
 }

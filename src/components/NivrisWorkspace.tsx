@@ -124,7 +124,7 @@ function metricsSignature(map: Record<string, TrackerMetrics | undefined>): stri
         .map((id) => {
             const m = map[id];
             if (!m) return `${id}:-`;
-            return `${id}:${m.total}:${m.awaitingReply}:${m.unreadCount}:${m.lastActivityTs ?? 0}:${m.matches[0]?.id ?? ""}`;
+            return `${id}:${m.total}:${m.unreadCount}:${m.lastActivityTs ?? 0}:${m.matches[0]?.id ?? ""}`;
         })
         .join("|");
 }
@@ -528,10 +528,6 @@ const NivrisWorkspace: React.FC = () => {
                                         <div className="mx_NivrisWorkspace_stat">
                                             <div className="mx_NivrisWorkspace_statLabel">PHÒNG</div>
                                             <div className="mx_NivrisWorkspace_statNum">{activeMetrics?.roomsCount ?? "…"}</div>
-                                        </div>
-                                        <div className="mx_NivrisWorkspace_stat mx_NivrisWorkspace_stat_warn">
-                                            <div className="mx_NivrisWorkspace_statLabel">CHỜ</div>
-                                            <div className="mx_NivrisWorkspace_statNum">{activeMetrics?.awaitingReply ?? "…"}</div>
                                         </div>
                                     </div>
                                 )}
@@ -1081,8 +1077,6 @@ const HomeOverviewView: React.FC<{
         };
     }, []);
 
-    const waitingSessions = trackers.filter((t) => !!metricsMap[t.id]?.awaitingReply);
-    const totalWaiting = waitingSessions.reduce((sum, t) => sum + (metricsMap[t.id]?.awaitingReply ?? 0), 0);
     const maxHour = Math.max(1, ...(overview?.hours.map((h) => h.total) ?? [1]));
 
     return (
@@ -1090,20 +1084,20 @@ const HomeOverviewView: React.FC<{
             <div className="mx_NivrisWorkspace_homeStatus">
                 <div className="mx_NivrisWorkspace_sectionLabel">TRẠNG THÁI</div>
                 <div className="mx_NivrisWorkspace_homeHero">
-                    <div className="mx_NivrisWorkspace_homeHeroLabel">CHỜ BẠN TRẢ LỜI</div>
+                    <div className="mx_NivrisWorkspace_homeHeroLabel">TIN HÔM NAY</div>
                     <div className="mx_NivrisWorkspace_homeHeroRow">
-                        <span className="mx_NivrisWorkspace_homeHeroNum">{totalWaiting}</span>
-                        <span className="mx_NivrisWorkspace_homeHeroSub">trên {waitingSessions.length} session</span>
+                        <span className="mx_NivrisWorkspace_homeHeroNum">{overview?.totalToday ?? "…"}</span>
+                        <span className="mx_NivrisWorkspace_homeHeroSub">trên {trackers.length} session</span>
                     </div>
                 </div>
                 <div className="mx_NivrisWorkspace_homeMiniStats">
-                    <div className="mx_NivrisWorkspace_homeMiniStat mx_NivrisWorkspace_homeMiniStat_warn">
-                        <div className="mx_NivrisWorkspace_statLabel">QUÁ HẠN 4H</div>
-                        <div className="mx_NivrisWorkspace_homeMiniNum">{overview?.overdueCount ?? "…"}</div>
+                    <div className="mx_NivrisWorkspace_homeMiniStat">
+                        <div className="mx_NivrisWorkspace_statLabel">PHÒNG ĐANG NGHE</div>
+                        <div className="mx_NivrisWorkspace_homeMiniNum">{overview?.roomsListening ?? "…"}</div>
                     </div>
                     <div className="mx_NivrisWorkspace_homeMiniStat">
-                        <div className="mx_NivrisWorkspace_statLabel">TIN HÔM NAY</div>
-                        <div className="mx_NivrisWorkspace_homeMiniNum">{overview?.totalToday ?? "…"}</div>
+                        <div className="mx_NivrisWorkspace_statLabel">CAO ĐIỂM</div>
+                        <div className="mx_NivrisWorkspace_homeMiniNum">{overview?.peakHourLabel ?? "—"}</div>
                     </div>
                 </div>
 
@@ -1159,22 +1153,6 @@ const HomeOverviewView: React.FC<{
                                         />
                                     </div>
                                     <span className="mx_NivrisWorkspace_distPct">{r.count}</span>
-                                </div>
-                            ))
-                        )}
-                    </div>
-                    <div className="mx_NivrisWorkspace_homeWaiters">
-                        <div className="mx_NivrisWorkspace_sectionLabel">NGƯỜI ĐANG CHỜ BẠN</div>
-                        {(overview?.waiters.length ?? 0) === 0 ? (
-                            <div className="mx_NivrisWorkspace_feedEmpty">Không ai đang chờ bạn trả lời.</div>
-                        ) : (
-                            overview!.waiters.map((w, i) => (
-                                <div className="mx_NivrisWorkspace_homeWaiterRow" key={i}>
-                                    <span className="mx_NivrisWorkspace_homeWaiterInitial">{w.senderName.slice(0, 1).toUpperCase()}</span>
-                                    <span className="mx_NivrisWorkspace_homeWaiterName">{w.senderName}</span>
-                                    <span className={`mx_NivrisWorkspace_homeWaiterAgo ${w.overdue ? "mx_NivrisWorkspace_homeWaiterAgo_warn" : ""}`}>
-                                        {relTime(w.ts)}
-                                    </span>
                                 </div>
                             ))
                         )}

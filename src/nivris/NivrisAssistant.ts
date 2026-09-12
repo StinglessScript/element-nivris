@@ -240,7 +240,6 @@ async function buildSideContext(plan: RetrievalPlan, todayMessages: StoredNivris
                 "TỔNG QUAN HÔM NAY:",
                 `- ${overview.totalToday} tin trong ${overview.roomsListening} phòng đang nghe${overview.peakHourLabel ? `, cao điểm ${overview.peakHourLabel}` : ""}`,
                 `- Phòng sôi động: ${overview.busyRooms.map((r) => `${r.room} (${r.count})`).join(", ") || "không có"}`,
-                `- Đang chờ bạn trả lời: ${overview.waiters.map((w) => `${w.senderName} ở ${w.roomName}${w.overdue ? " (quá 4h)" : ""}`).join("; ") || "không ai"}`,
             ].join("\n"),
         );
     }
