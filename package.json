@@ -1,7 +1,7 @@
 {
     "name": "nivris",
     "private": true,
-    "version": "1.2.0",
+    "version": "1.2.1",
     "type": "module",
     "main": "lib/index.js",
     "license": "UNLICENSED",
@@ -14,7 +14,8 @@
         "lint:types": "tsc --noEmit",
         "install:live": "node scripts/install-nivris.mjs",
         "uninstall:live": "node scripts/uninstall-nivris.mjs",
-        "build:standalone-mac": "bash scripts/build-standalone-mac.sh"
+        "build:standalone-mac": "bash scripts/build-standalone-mac.sh",
+        "bump": "node scripts/bump-version.mjs"
     },
     "dependencies": {
         "@arcmantle/vite-plugin-import-css-sheet": "^1.0.12",

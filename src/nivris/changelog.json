@@ -1,5 +1,13 @@
 [
     {
+        "version": "1.2.1",
+        "date": "2026-09-12",
+        "changes": [
+            "Thêm lệnh npm run bump để nâng phiên bản và ghi changelog trong một bước, mặc định nâng số cuối.",
+            "Mặc định nâng bản vá cho các thay đổi nhỏ, thay vì luôn nâng bản nhỏ."
+        ]
+    },
+    {
         "version": "1.2.0",
         "date": "2026-09-12",
         "changes": [
