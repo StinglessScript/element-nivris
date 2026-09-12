@@ -20,11 +20,20 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+import { HTA_HTML } from "./progress-hta";
 import { LOGO_PNG_BASE64 } from "./logo-base64";
 
 type Status = { percent: number; label: string; done: boolean; ok?: boolean; message?: string; logPath?: string };
 
 let statusFile: string | null = null;
+
+/** False once a progress window was asked for and never appeared — i.e. PowerShell doesn't run on
+ * this machine, so finish() must not try to draw its result dialog with it either. */
+let powershellUsable = true;
+
+export function progressPowerShellUsable(): boolean {
+    return powershellUsable;
+}
 
 const PS_SCRIPT = String.raw`
 param([string]$StatusFile, [string]$Title)
@@ -200,7 +209,13 @@ $timer.Add_Tick({
     }
 })
 $timer.Start()
-$form.Add_Shown({ $form.Activate() })
+$form.Add_Shown({
+    $form.Activate()
+    # Proof of life for the installer: this window is the only thing that can say PowerShell really
+    # ran here. On a locked-down machine the whole script can be refused before it draws anything,
+    # and every layer between (hidden wscript, detached process, GUI-subsystem exe) hides the error.
+    try { New-Item -ItemType File -Force -Path (Join-Path (Split-Path $StatusFile -Parent) 'ready.marker') | Out-Null } catch { }
+})
 [System.Windows.Forms.Application]::Run($form)
 
 # This script and its status file live in a per-run temp dir (see startProgress() below) that
@@ -246,14 +261,46 @@ function writeUtf16LeBom(filePath: string, content: string): void {
 }
 
 /** Spawns the detached progress window. No-op outside Windows. */
+/** Blocks until the window reports itself up, or gives up. The spawn succeeding proves nothing —
+ * it succeeds just as well when the thing spawned is then refused by policy, which is how an
+ * install ended with no window and no error at all. */
+function waitForReady(dir: string, timeoutMs: number): boolean {
+    const marker = path.join(dir, "ready.marker");
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline && !fs.existsSync(marker)) {
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 100);
+    }
+    return fs.existsSync(marker);
+}
+
 export function startProgress(title: string): void {
     if (process.platform !== "win32") return;
     try {
         const dir = fs.mkdtempSync(path.join(os.tmpdir(), "nivris-progress-"));
         statusFile = path.join(dir, "status.json");
+        writeStatus({ percent: 0, label: "Dang chuan bi...", done: false });
+
+        // mshta first, PowerShell second. mshta is a separate scripting engine under separate
+        // policy, so it still runs on machines that refuse PowerShell scripts — and those are
+        // exactly the machines this window was invisible on. It also renders with HTML/CSS, which
+        // is what the design actually wants.
+        const htaFile = path.join(dir, "progress.hta");
+        fs.writeFileSync(
+            htaFile,
+            HTA_HTML.replace("__LOGO_B64__", LOGO_PNG_BASE64)
+                .replace("__STATUS_FILE__", statusFile.replace(/\\/g, "\\\\"))
+                .replace("__TITLE__", title),
+            "utf8",
+        );
+        try {
+            spawn("mshta.exe", [htaFile], { stdio: "ignore", windowsHide: false, detached: true }).unref();
+            if (waitForReady(dir, 4000)) return;
+        } catch {
+            // fall through to the PowerShell window
+        }
+
         const scriptFile = path.join(dir, "progress.ps1");
         writeUtf8Bom(scriptFile, PS_SCRIPT.replace("__LOGO_B64__", LOGO_PNG_BASE64));
-        writeStatus({ percent: 0, label: "Dang chuan bi...", done: false });
 
         // Launched via WScript.Shell.Run (window style 0 = hidden) rather than
         // `powershell -WindowStyle Hidden` directly: PowerShell/conhost still briefly allocates a
@@ -284,12 +331,20 @@ export function startProgress(title: string): void {
             windowsHide: true,
             detached: true,
         }).unref();
+        if (!waitForReady(dir, 3000)) {
+            // Neither engine produced a window: nothing can draw a progress UI here, and finish()
+            // must not try to draw its result dialog with PowerShell either.
+            statusFile = null;
+            powershellUsable = false;
+        }
     } catch {
         // PowerShell/WScript missing or unspawnable — fall back to no progress window at all;
         // finish() still needs to show *something*, handled by its own fallback when statusFile is null.
         statusFile = null;
+        powershellUsable = false;
     }
 }
+
 
 /** Updates the progress bar. No-op if startProgress() wasn't called or failed. */
 export function setProgress(percent: number, label: string): void {

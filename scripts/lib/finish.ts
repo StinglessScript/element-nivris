@@ -19,7 +19,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 
-import { endProgress, progressActive } from "./progress-win";
+import { endProgress, progressActive, progressPowerShellUsable } from "./progress-win";
 
 const logLines: string[] = [];
 
@@ -122,6 +122,39 @@ $form.Add_Shown({ $form.Activate() })
 [void]$form.ShowDialog()
 `;
 
+/** VBScript MsgBox, launched with wscript. The one way left to put something on screen when
+ * PowerShell is off the table: WSH is a separate engine with its own policy, so a machine that
+ * refuses PowerShell scripts will very often still run this. No log buttons — MsgBox has none —
+ * but it does say the run finished and where the log is, which beats an install that ends with
+ * nothing on screen at all. */
+function showVbsMessage(title: string, body: string, isError: boolean, logPath: string | null): void {
+    try {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), "nivris-msg-"));
+        const file = path.join(dir, "message.vbs");
+        const full = body + (logPath ? `\n\nNhật ký: ${logPath}` : "");
+        // VBScript string literals escape a quote by doubling it, and have no escape for a newline
+        // at all — it has to be concatenated in as vbCrLf.
+        const encoded = full
+            .split("\n")
+            .map((line) => `"${line.replace(/"/g, '""')}"`)
+            .join(" & vbCrLf & ");
+        const icon = isError ? 16 : 64;
+        // UTF-16LE + BOM: Windows Script Host only reads a .vbs as Unicode in that form, and this
+        // text is Vietnamese.
+        fs.writeFileSync(
+            file,
+            Buffer.concat([
+                Buffer.from([0xff, 0xfe]),
+                Buffer.from(`MsgBox ${encoded}, ${icon}, "${title.replace(/"/g, '""')}"\r\n`, "utf16le"),
+            ]),
+        );
+        spawnSync("wscript.exe", [file], { stdio: "ignore" });
+        fs.rmSync(dir, { recursive: true, force: true });
+    } catch {
+        // Nothing left to try.
+    }
+}
+
 function showResultWindow(title: string, body: string, isError: boolean, logPath: string | null): void {
     try {
         const dir = fs.mkdtempSync(path.join(os.tmpdir(), "nivris-result-"));
@@ -191,9 +224,14 @@ export function finish(title: string, success: boolean, successMessage?: string)
             // that can leave the run with no visible ending.
             endProgress(success, body, logFile);
             sleepSync(200);
-        } else {
-            // Only reached when the progress window never came up (PowerShell blocked, etc.).
+        } else if (progressPowerShellUsable()) {
+            // Only reached when no progress window was ever started (a run that never called
+            // startProgress) — PowerShell is fine here, so the full dialog is still on the table.
             showResultWindow(title, body, !success, logFile);
+        } else {
+            // The progress window was asked for and never appeared: PowerShell doesn't run on this
+            // machine, so drawing the result dialog with it would fail the same silent way.
+            showVbsMessage(title, body, !success, logFile);
         }
     } else {
         console.log("\nNhấn phím bất kỳ để đóng cửa sổ này...");

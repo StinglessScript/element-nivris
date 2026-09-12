@@ -1,5 +1,13 @@
 [
     {
+        "version": "1.2.9",
+        "date": "2026-09-12",
+        "changes": [
+            "Cửa sổ cài đặt vẽ bằng HTA (mshta) nên hiện được cả trên máy bị chặn chạy PowerShell — trước đó không thấy gì suốt quá trình cài.",
+            "Khi không engine nào vẽ được, vẫn có hộp thoại báo kết quả bằng VBScript thay vì kết thúc lặng lẽ."
+        ]
+    },
+    {
         "version": "1.2.8",
         "date": "2026-09-12",
         "changes": [
