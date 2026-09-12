@@ -148,7 +148,7 @@ function showVbsMessage(title: string, body: string, isError: boolean, logPath: 
                 Buffer.from(`MsgBox ${encoded}, ${icon}, "${title.replace(/"/g, '""')}"\r\n`, "utf16le"),
             ]),
         );
-        spawnSync("wscript.exe", [file], { stdio: "ignore" });
+        spawnSync("wscript.exe", [file], { stdio: "ignore", windowsHide: true });
         fs.rmSync(dir, { recursive: true, force: true });
     } catch {
         // Nothing left to try.

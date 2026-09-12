@@ -72,7 +72,7 @@ function copyExecutableReplacingRunningInstance(src: string, dest: string, helpe
             killByPidFile(helperDir);
             if (process.platform === "win32") {
                 try {
-                    execFileSync("taskkill", ["/IM", path.basename(dest), "/F"], { stdio: "ignore" });
+                    execFileSync("taskkill", ["/IM", path.basename(dest), "/F"], { stdio: "ignore", windowsHide: true });
                 } catch {
                     // wasn't running under that name either — fine, the retry below will surface
                     // whatever's actually still wrong

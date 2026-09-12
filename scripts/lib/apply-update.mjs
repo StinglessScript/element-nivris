@@ -358,7 +358,10 @@ export async function applyNivrisUpdate({ moduleDir, builtJsPath, realToken, env
 
 function isRunningWindows() {
     try {
-        const out = spawnSync("tasklist", ["/FI", "IMAGENAME eq Element.exe", "/FO", "CSV", "/NH"], { encoding: "utf-8" });
+        const out = spawnSync("tasklist", ["/FI", "IMAGENAME eq Element.exe", "/FO", "CSV", "/NH"], {
+            encoding: "utf-8",
+            windowsHide: true,
+        });
         return (out.stdout ?? "").toLowerCase().includes("element.exe");
     } catch {
         return false;
@@ -392,13 +395,13 @@ export async function quitElementIfRunning(onStatus) {
         if (!isRunningWindows()) return true;
         onStatus?.("Element đang chạy — đang tắt...");
         try {
-            spawnSync("taskkill", ["/IM", "Element.exe", "/T"]);
+            spawnSync("taskkill", ["/IM", "Element.exe", "/T"], { stdio: "ignore", windowsHide: true });
         } catch {
             // ignore
         }
         if (await waitUntilClosed(isRunningWindows, 5000)) return true;
         try {
-            spawnSync("taskkill", ["/IM", "Element.exe", "/T", "/F"]);
+            spawnSync("taskkill", ["/IM", "Element.exe", "/T", "/F"], { stdio: "ignore", windowsHide: true });
         } catch {
             // ignore
         }
@@ -446,7 +449,7 @@ export function relaunchElement() {
             const resourcesDir = findElementApp({ fail: () => {} });
             if (resourcesDir) {
                 const exe = path.join(path.dirname(resourcesDir), "Element.exe");
-                if (fs.existsSync(exe)) spawn(exe, [], { detached: true, stdio: "ignore" }).unref();
+                if (fs.existsSync(exe)) spawn(exe, [], { detached: true, stdio: "ignore", windowsHide: true }).unref();
             }
         } else if (process.platform === "linux") {
             spawn("element-desktop", [], { detached: true, stdio: "ignore" }).unref();

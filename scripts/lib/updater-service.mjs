@@ -171,10 +171,11 @@ ${argElements}
         // literal as `""`, so quoting it for shell.Run's own argument means doubling those two.
         const vbsEscaped = `"${cmdPath}"`.replace(/"/g, '""');
         fs.writeFileSync(vbsPath, `Set shell = CreateObject("WScript.Shell")\r\nshell.Run "${vbsEscaped}", 0, False\r\n`);
-        spawnSync("schtasks", ["/delete", "/tn", WIN_TASK_NAME, "/f"], { stdio: "ignore" });
-        // The Run-key fallback (used where schtasks is denied) has to come out here too, or an
-        // uninstall leaves something trying to start a helper that no longer exists.
-        spawnSync("reg", ["delete", WIN_RUN_KEY, "/v", WIN_RUN_VALUE, "/f"], { stdio: "ignore" }); // ignore failure — may not exist yet
+        // Clean slate before re-registering — either mechanism may be left over from a previous
+        // install, and leaving both in place would start the helper twice. Both ignore failure:
+        // neither is expected to exist on a first run.
+        spawnSync("schtasks", ["/delete", "/tn", WIN_TASK_NAME, "/f"], { stdio: "ignore", windowsHide: true });
+        spawnSync("reg", ["delete", WIN_RUN_KEY, "/v", WIN_RUN_VALUE, "/f"], { stdio: "ignore", windowsHide: true });
         const createRes = spawnSync("schtasks", [
             "/create",
             "/tn",
@@ -186,7 +187,7 @@ ${argElements}
             "/rl",
             "limited",
             "/f",
-        ], { encoding: "utf-8" });
+        ], { encoding: "utf-8", windowsHide: true });
 
         // Start it now, whatever happens with autostart below: this is what makes the helper work
         // in the session the user is standing in front of, and it needs no privileges at all.
@@ -229,7 +230,7 @@ ${argElements}
                     `wscript.exe //B "${vbsPath}"`,
                     "/f",
                 ],
-                { encoding: "utf-8" },
+                { encoding: "utf-8", windowsHide: true },
             );
             if (regRes.status !== 0) {
                 const regDetail = (regRes.stderr || regRes.stdout || "").toString().trim() || `mã lỗi ${regRes.status}`;
@@ -242,7 +243,7 @@ ${argElements}
             return { ok: startNow(), autostart: true };
         }
 
-        const runRes = spawnSync("schtasks", ["/run", "/tn", WIN_TASK_NAME], { encoding: "utf-8" });
+        const runRes = spawnSync("schtasks", ["/run", "/tn", WIN_TASK_NAME], { encoding: "utf-8", windowsHide: true });
         if (runRes.status !== 0) {
             const detail = (runRes.stderr || runRes.stdout || "").toString().trim() || `mã lỗi ${runRes.status}`;
             log?.(`Đã đăng ký Scheduled Task nhưng chạy thử thất bại: ${detail}`);
@@ -285,7 +286,10 @@ export function unregisterHelperService({ log }) {
         spawnSync("launchctl", ["unload", plistPath], { stdio: "ignore" });
         fs.rmSync(plistPath, { force: true });
     } else if (process.platform === "win32") {
-        spawnSync("schtasks", ["/delete", "/tn", WIN_TASK_NAME, "/f"], { stdio: "ignore" });
+        spawnSync("schtasks", ["/delete", "/tn", WIN_TASK_NAME, "/f"], { stdio: "ignore", windowsHide: true });
+        // The Run-key fallback is used wherever schtasks is denied, so uninstall has to remove it
+        // too — otherwise the machine keeps trying to start a helper that is no longer there.
+        spawnSync("reg", ["delete", WIN_RUN_KEY, "/v", WIN_RUN_VALUE, "/f"], { stdio: "ignore", windowsHide: true });
     } else if (process.platform === "linux") {
         spawnSync("systemctl", ["--user", "disable", "--now", SYSTEMD_UNIT], { stdio: "ignore" });
         fs.rmSync(systemdUnitPath(), { force: true });
