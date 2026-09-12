@@ -1,5 +1,12 @@
 [
     {
+        "version": "1.2.23",
+        "date": "2026-09-12",
+        "changes": [
+            "Tuỳ chọn tự đánh dấu đã xem giờ đánh dấu khi bạn rời phòng, không xoá danh sách ngay khi vừa mở."
+        ]
+    },
+    {
         "version": "1.2.22",
         "date": "2026-09-12",
         "changes": [

@@ -261,15 +261,20 @@ const NivrisWorkspace: React.FC = () => {
     const activeFeedGroup = visibleFeedGroups.find((g) => g.roomId === activeRoomId) ?? null;
     const visibleFeedItems = activeFeedGroup?.items ?? [];
 
-    // Opt-in: for people who treat opening a session as having read it. Scoped to the room tab on
-    // screen, not the whole session — the first version marked every match across every room, so
-    // opening a session wiped out rooms the user never looked at. Switching tabs marks that tab,
-    // which is the same rule applied to whatever is actually in front of you.
+    // Opt-in, and deliberately on the way OUT rather than on the way in. Marking on arrival looked
+    // obvious and was useless: the Chưa xem feed filters by these very marks, so the list emptied
+    // itself the instant it was opened and there was nothing left to read. Marking the tab you're
+    // leaving keeps it readable while you're in it and still clears the badge once you've moved on.
     const visibleFeedIds = visibleFeedItems.map((p) => p.message.id).join("|");
+    const pendingSeenRef = useRef<{ key: string; ids: string[] } | null>(null);
     useEffect(() => {
-        if (!settings.autoMarkSeenOnOpen || feedFilter !== "open" || !visibleFeedIds) return;
-        NivrisDoneStore.instance.setManyDone(visibleFeedIds.split("|"), true);
-    }, [settings.autoMarkSeenOnOpen, feedFilter, visibleFeedIds]);
+        const key = `${activeId ?? ""}|${activeRoomId ?? ""}`;
+        const prev = pendingSeenRef.current;
+        if (settings.autoMarkSeenOnOpen && prev && prev.key !== key && prev.ids.length) {
+            NivrisDoneStore.instance.setManyDone(prev.ids, true);
+        }
+        pendingSeenRef.current = { key, ids: feedFilter === "open" && visibleFeedIds ? visibleFeedIds.split("|") : [] };
+    }, [settings.autoMarkSeenOnOpen, activeId, activeRoomId, feedFilter, visibleFeedIds]);
 
     const onPickEntity = (entity: NivrisPickerEntity): void => {
         const type: NivrisTrackerType = entity.kind === "user" ? "boss" : "group";
@@ -1965,11 +1970,12 @@ const SettingsPanel: React.FC<{
                                     checked={settings.autoMarkSeenOnOpen ?? false}
                                     onChange={(e) => onChangeAutoMarkSeen(e.target.checked)}
                                 />
-                                <span>Tự đánh dấu đã xem khi mở một session</span>
+                                <span>Tự đánh dấu đã xem sau khi xem xong</span>
                             </label>
                             <div className="mx_NivrisWorkspace_settingsNote">
-                                Chỉ áp cho phòng đang mở trong session, không phải mọi phòng. Tắt thì badge chỉ hết
-                                khi bạn bấm ✓ trên từng tin hoặc "Đánh dấu tất cả đã xem".
+                                Đánh dấu phòng bạn vừa xem khi chuyển sang session/phòng khác — không xoá ngay trước
+                                mắt, và chỉ áp cho phòng đang mở chứ không phải cả session. Tắt thì badge chỉ hết khi
+                                bạn bấm ✓ trên từng tin hoặc "Đánh dấu tất cả đã xem".
                             </div>
                         </div>
 
