@@ -449,7 +449,12 @@ export function relaunchElement() {
             const resourcesDir = findElementApp({ fail: () => {} });
             if (resourcesDir) {
                 const exe = path.join(path.dirname(resourcesDir), "Element.exe");
-                if (fs.existsSync(exe)) spawn(exe, [], { detached: true, stdio: "ignore", windowsHide: true }).unref();
+                // NO windowsHide here, unlike every other spawn in this file: libuv implements that
+                // option as STARTF_USESHOWWINDOW + SW_HIDE, which is a hint the launched program's
+                // own first window is expected to honour. Fine for console tools — that's the point
+                // — but Element is a GUI app, and it came up hidden (reported as "update xong không
+                // tự mở Element lại"). Element allocates no console, so there was nothing to hide.
+                if (fs.existsSync(exe)) spawn(exe, [], { detached: true, stdio: "ignore" }).unref();
             }
         } else if (process.platform === "linux") {
             spawn("element-desktop", [], { detached: true, stdio: "ignore" }).unref();

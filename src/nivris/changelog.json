@@ -1,5 +1,12 @@
 [
     {
+        "version": "1.2.15",
+        "date": "2026-09-12",
+        "changes": [
+            "Sửa lỗi cập nhật xong Element không tự mở lại trên Windows."
+        ]
+    },
+    {
         "version": "1.2.14",
         "date": "2026-09-12",
         "changes": [
