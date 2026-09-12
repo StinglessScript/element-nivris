@@ -49,6 +49,8 @@ File này tự chứa mọi thứ cần thiết (không cần Node.js, không c�
 
 ### Windows — không cần cài Node.js, không hiện cửa sổ đen (khuyến nghị)
 
+Cần **Windows 10 phiên bản 1809 (build 17763) trở lên** — kiểm tra bằng `Win + R` → gõ `winver`.
+
 1. Tải `NivrisInstaller-Windows.exe`.
 2. Double-click. Windows Defender SmartScreen có thể chặn ("Windows protected your PC") — bấm
    **More info**, rồi bấm **Run anyway**.
@@ -57,14 +59,20 @@ File này tự chứa mọi thứ cần thiết (không cần Node.js, không c�
 
 Gỡ cài đặt tương tự bằng `NivrisUninstaller-Windows.exe` ở cùng trang Releases.
 
-### macOS / Windows — cần cài Node.js trước
+> **Hiện lỗi "Entry Point Not Found — ClosePseudoConsole"?** Windows trên máy cũ hơn build 17763.
+> File `.exe` này đóng gói bằng Bun nên cần API đó. Dùng `Install-Nivris-Windows.bat` ở mục dưới —
+> chạy được trên các bản Windows cũ hơn, và cũng không bị SmartScreen chặn.
 
-Máy cần cài sẵn [Node.js](https://nodejs.org) (bản LTS) — chỉ cài 1 lần. Sau đó, từ trang
-Releases:
+### macOS / Windows — bản script (máy cũ, hoặc khi file .exe bị chặn)
 
-- **macOS**: tải `Install-Nivris-Mac.zip`, double-click để giải nén, rồi double-click file
-  `.command` bên trong. Gặp Gatekeeper chặn thì xử lý y như bước 3 ở mục trên.
+Từ trang Releases:
+
 - **Windows**: tải `Install-Nivris-Windows.bat`, double-click chạy thẳng (không cần giải nén).
+  **Không cần cài Node.js trước** — máy nào chưa có, file này tự tải bản portable về thư mục tạm
+  và dùng tạm, không cài gì vào máy.
+- **macOS**: tải `Install-Nivris-Mac.zip`, double-click để giải nén, rồi double-click file
+  `.command` bên trong. Máy cần có sẵn [Node.js](https://nodejs.org) bản LTS. Gặp Gatekeeper chặn
+  thì xử lý y như bước 3 ở mục trên.
 
 Một cửa sổ đen (Terminal/Command Prompt) hiện ra, tự chạy và báo kết quả — không cần gõ gì. Xong
 thì tắt hẳn Element (Cmd+Q trên macOS, hoặc đóng hết cửa sổ trên Windows) rồi mở lại.

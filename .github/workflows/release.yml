@@ -164,6 +164,16 @@ jobs:
       - name: Generate release notes
         run: node repo/scripts/release-notes.mjs > release-notes.md
 
+      # The script-based installers (for machines that can't run the Bun .exe) were uploaded to the
+      # release by hand once and then never again, so edits to them in this repo never reached
+      # anyone. Republish them from source every time, like every other asset.
+      - name: Stage script installers
+        run: |
+          cp repo/installers/Install-Nivris-Windows.bat dist/
+          cp repo/installers/Uninstall-Nivris-Windows.bat dist/
+          (cd repo/installers && zip -j ../../dist/Install-Nivris-Mac.zip Install-Nivris-Mac.command)
+          (cd repo/installers && zip -j ../../dist/Uninstall-Nivris-Mac.zip Uninstall-Nivris-Mac.command)
+
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.0.0
@@ -178,3 +188,7 @@ jobs:
             dist/nivris-module.js
             dist/nivris-module.js.map
             dist/nivris-version.json
+            dist/Install-Nivris-Windows.bat
+            dist/Uninstall-Nivris-Windows.bat
+            dist/Install-Nivris-Mac.zip
+            dist/Uninstall-Nivris-Mac.zip
