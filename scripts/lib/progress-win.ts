@@ -63,10 +63,10 @@ $timer.Add_Tick({
     $bar.Value = [Math]::Min([Math]::Max([int]$s.percent, 0), 100)
     $label.Text = $s.label
     if ($s.done) {
+        # The result dialog is shown by the installer process itself (see finish.ts's
+        # showResultWindow) so it can carry a "Xem nhat ky" button a MessageBox could never have.
+        # This window's only remaining job is to get out of the way.
         $timer.Stop()
-        $icon = if ($s.ok) { 'Information' } else { 'Error' }
-        $shownTitle = if ($s.ok) { $Title } else { "$Title - Loi" }
-        [System.Windows.Forms.MessageBox]::Show($s.message, $shownTitle, 'OK', $icon) | Out-Null
         $form.Close()
     }
 })

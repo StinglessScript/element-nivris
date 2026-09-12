@@ -1,5 +1,13 @@
 [
     {
+        "version": "1.2.5",
+        "date": "2026-09-12",
+        "changes": [
+            "Hộp thoại kết thúc cài đặt có nút Xem nhật ký và Sao chép nhật ký — xem được ngay bằng chuột, không cần mở file thủ công.",
+            "Nhật ký gộp cả log của helper cập nhật, nên lỗi 'cài xong nhưng helper không chạy' đọc được trong cùng một chỗ."
+        ]
+    },
+    {
         "version": "1.2.4",
         "date": "2026-09-12",
         "changes": [
