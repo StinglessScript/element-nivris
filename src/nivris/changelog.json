@@ -1,5 +1,12 @@
 [
     {
+        "version": "1.2.13",
+        "date": "2026-09-12",
+        "changes": [
+            "Dọn bớt tab Hệ thống: bỏ dòng đường dẫn nhật ký và ghi chú về API key."
+        ]
+    },
+    {
         "version": "1.2.12",
         "date": "2026-09-12",
         "changes": [

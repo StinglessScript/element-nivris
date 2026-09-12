@@ -1027,16 +1027,6 @@ body[class*="cpd-theme-dark"] {
 }
 .mx_NivrisWorkspace_settingsReset:disabled { color: var(--jv-muted); cursor: default; }
 .mx_NivrisWorkspace_settingsNote { font: 400 10.5px/1.5 var(--jv-sans); color: var(--jv-muted); }
-.mx_NivrisWorkspace_logPath {
-    display: inline-block;
-    margin: 0 8px;
-    padding: 1px 6px;
-    border-radius: 4px;
-    background-color: var(--jv-selected);
-    font: 400 10px var(--jv-mono);
-    color: var(--jv-ink);
-    user-select: all;
-}
 .mx_NivrisWorkspace_settingsPlaceholders { font: 400 10px var(--jv-mono); color: var(--jv-muted); }
 .mx_NivrisWorkspace_settingsSave {
     align-self: flex-start;
