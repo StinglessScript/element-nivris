@@ -102,20 +102,19 @@ async function findMatches(tracker: NivrisUserTracker, preloaded?: StoredNivrisM
     const sinceTs = startOfToday();
     const all = preloaded ?? (await getMessagesSince(sinceTs));
 
-    // Picked from the entity picker (real userId/roomId) — match exactly instead of by fuzzy name.
+    // Matching is done unbounded and capped afterwards, so the count reported to the UI is the real
+    // one. Capping first made a session with 350 messages report "200 tin" — a number that says more
+    // about MAX_MATCHES than about the person.
     if (tracker.targetId && (tracker.type === "boss" || tracker.type === "group")) {
         const field = tracker.type === "boss" ? "sender" : "roomId";
-        return all
-            .filter((m) => m[field] === tracker.targetId)
-            .sort((a, b) => b.ts - a.ts)
-            .slice(0, MAX_MATCHES);
+        return all.filter((m) => m[field] === tracker.targetId).sort((a, b) => b.ts - a.ts);
     }
 
-    if (tracker.type === "mention") return getMentions(sinceTs, MAX_MATCHES, all);
+    if (tracker.type === "mention") return getMentions(sinceTs, Number.MAX_SAFE_INTEGER, all);
 
     const keywords = keywordsForTracker(tracker);
     if (!keywords.length) return [];
-    return searchMessages(keywords, sinceTs, MAX_MATCHES, all);
+    return searchMessages(keywords, sinceTs, Number.MAX_SAFE_INTEGER, all);
 }
 
 /**
@@ -131,14 +130,18 @@ export async function matchesInMessages(
 }
 
 export async function computeTrackerMetrics(tracker: NivrisUserTracker, preloaded?: StoredNivrisMessage[]): Promise<TrackerMetrics> {
-    const matches = await findMatches(tracker, preloaded);
-    if (!matches.length) return EMPTY_METRICS;
+    const allMatches = await findMatches(tracker, preloaded);
+    if (!allMatches.length) return EMPTY_METRICS;
+    // Counts come from every match; everything that renders or gets sent to the AI works off the
+    // capped list, which is what MAX_MATCHES is actually for.
+    const total = allMatches.length;
+    const matches = allMatches.slice(0, MAX_MATCHES);
 
     const myUserId = getMatrixClient().getUserId();
-    const roomIds = new Set(matches.map((m) => m.roomId));
+    const roomIds = new Set(allMatches.map((m) => m.roomId));
 
     const lastSeenTs = tracker.lastSeenTs ?? 0;
-    const unreadCount = matches.filter((m) => m.ts > lastSeenTs && m.sender !== myUserId).length;
+    const unreadCount = allMatches.filter((m) => m.ts > lastSeenTs && m.sender !== myUserId).length;
 
     const recent = [...matches].sort((a, b) => b.ts - a.ts).slice(0, 4);
     const priorities: TrackerPriorityItem[] = recent.map((m, i) => ({
@@ -246,7 +249,7 @@ export async function computeTrackerMetrics(tracker: NivrisUserTracker, preloade
 
     return {
         matches,
-        total: matches.length,
+        total,
         roomsCount: roomIds.size,
         unreadCount,
         lastActivityTs: recent[0]?.ts ?? null,

@@ -264,15 +264,17 @@ body[class*="cpd-theme-dark"] {
     text-overflow: ellipsis;
 }
 
+/* A filled pill, like Element's own unread count — it was transparent with amber text, which read
+   as a stray number rather than a badge. Same tokens Element paints its notification badge with. */
 .mx_NivrisWorkspace_sessionBadge {
     flex-shrink: 0;
-    min-width: 18px;
-    height: 18px;
-    padding: 0 5px;
-    border-radius: 9px;
-    background-color: transparent;
-    color: var(--jv-amber-text);
-    font: 600 9.5px var(--jv-mono);
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    border-radius: 10px;
+    background-color: var(--cpd-color-bg-accent-rest);
+    color: var(--cpd-color-text-on-solid-primary);
+    font: 600 11px var(--jv-sans);
     display: flex;
     align-items: center;
     justify-content: center;

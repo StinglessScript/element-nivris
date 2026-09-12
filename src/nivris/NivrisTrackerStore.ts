@@ -111,6 +111,14 @@ class NivrisTrackerStore extends EventEmitter {
         this.emit(NIVRIS_TRACKER_STORE_CHANGE_EVENT);
     }
 
+    /** Marks a tracker's messages as seen without changing which one is active — setActive only
+     * does it on a change, so it can't clear a badge for the session already open. */
+    public markSeen(id: string): void {
+        this.trackers = this.trackers.map((t) => (t.id === id ? { ...t, lastSeenTs: Date.now() } : t));
+        save(this.trackers);
+        this.emit(NIVRIS_TRACKER_STORE_CHANGE_EVENT);
+    }
+
     /** Singleton trackers (mention/priority) return the existing one instead of duplicating. */
     public addTracker(type: NivrisTrackerType, label: string, targetId?: string): NivrisUserTracker {
         if (type === "mention" || type === "priority") {

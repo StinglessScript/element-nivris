@@ -1,5 +1,14 @@
 [
     {
+        "version": "1.2.19",
+        "date": "2026-09-12",
+        "changes": [
+            "Số tin của mỗi session hiện đúng thực tế, không còn dừng ở 200.",
+            "Bỏ số phòng khỏi danh sách session và phần đầu màn hình.",
+            "Badge tin chưa xem hiển thị dạng viên tròn như Element, và tự hết khi bạn đang mở session đó."
+        ]
+    },
+    {
         "version": "1.2.18",
         "date": "2026-09-12",
         "changes": [

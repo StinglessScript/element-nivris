@@ -243,6 +243,15 @@ const NivrisWorkspace: React.FC = () => {
         .map((g) => ({ ...g, items: g.items.filter(matchesFeedFilter) }))
         .filter((g) => g.items.length > 0);
 
+    // Same rule as a room in Element: the session you have open doesn't keep an unread badge. The
+    // click that opened it already marked it seen; this is for messages that land while you're
+    // sitting in it.
+    useEffect(() => {
+        if (activeTracker && activeMetrics?.unreadCount) {
+            NivrisTrackerStore.instance.markSeen(activeTracker.id);
+        }
+    }, [activeTracker, activeMetrics?.unreadCount]);
+
     // Keep the room-tab selection valid as metrics load in/change, AND as rooms drop out of the
     // current filter (default to the busiest room still listed). Following the filtered groups is
     // what stops the feed dead-ending on an empty room right after you mark that room đã xem.
@@ -456,7 +465,7 @@ const NivrisWorkspace: React.FC = () => {
                                             <span className="mx_NivrisWorkspace_sessionMain">
                                                 <div className="mx_NivrisWorkspace_sessionName">{trackerTitle(tracker)}</div>
                                                 <div className="mx_NivrisWorkspace_sessionMeta">
-                                                    {metrics === undefined ? "đang tính…" : `${metrics.total} tin · ${metrics.roomsCount} phòng`}
+                                                    {metrics === undefined ? "đang tính…" : `${metrics.total} tin`}
                                                 </div>
                                             </span>
                                             {!!metrics?.unreadCount && (
@@ -518,7 +527,7 @@ const NivrisWorkspace: React.FC = () => {
                                     </div>
                                     {activeTracker && (
                                         <div className="mx_NivrisWorkspace_mainSource">
-                                            {activeMetrics ? `${activeMetrics.roomsCount} phòng · ${activeMetrics.total} tin liên quan` : "đang tính…"}
+                                            {activeMetrics ? `${activeMetrics.total} tin liên quan` : "đang tính…"}
                                         </div>
                                     )}
                                 </div>
@@ -527,10 +536,6 @@ const NivrisWorkspace: React.FC = () => {
                                         <div className="mx_NivrisWorkspace_stat">
                                             <div className="mx_NivrisWorkspace_statLabel">TIN</div>
                                             <div className="mx_NivrisWorkspace_statNum">{activeMetrics?.total ?? "…"}</div>
-                                        </div>
-                                        <div className="mx_NivrisWorkspace_stat">
-                                            <div className="mx_NivrisWorkspace_statLabel">PHÒNG</div>
-                                            <div className="mx_NivrisWorkspace_statNum">{activeMetrics?.roomsCount ?? "…"}</div>
                                         </div>
                                     </div>
                                 )}
