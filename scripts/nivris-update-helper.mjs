@@ -61,7 +61,14 @@ const helperDir =
 const configPath = path.join(helperDir, "helper-config.json");
 
 function log(msg) {
-    console.log(`[nivris-update-helper] ${new Date().toISOString()} ${msg}`);
+    // Guarded: the Windows build is a GUI-subsystem binary, so stdout is only a valid handle when
+    // the launcher redirected it (run-helper.cmd does). A throw here would take down the helper
+    // over a log line.
+    try {
+        console.log(`[nivris-update-helper] ${new Date().toISOString()} ${msg}`);
+    } catch {
+        // nothing to do — there's nowhere to report a failure to report things
+    }
 }
 
 function loadConfig() {

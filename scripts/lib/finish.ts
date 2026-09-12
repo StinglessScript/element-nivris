@@ -15,6 +15,8 @@ Please see LICENSE files in the repository root for full details.
 //     that window never came up (PowerShell missing, etc.) fall back to a one-off MessageBox here.
 
 import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { spawnSync } from "node:child_process";
 
 import { endProgress, progressActive } from "./progress-win";
@@ -63,9 +65,32 @@ function showWindowsMessageBox(title: string, body: string, isError: boolean): v
  * there's something to debug from. On success, shows `successMessage` instead — a short, friendly
  * line rather than a dump of internal paths and step-by-step log output. Never returns.
  */
+/** Every run's log, written next to the helper so a failed install can be diagnosed afterwards.
+ * The Windows build has no console window at all (GUI subsystem — see scripts/build-sea-win.mjs),
+ * and the result dialog only shows a summary, so without this a bad install leaves no trace to
+ * look at once the dialog is dismissed. */
+function writeInstallLog(title: string, success: boolean): string | null {
+    try {
+        const dir =
+            process.platform === "win32"
+                ? path.join(process.env.APPDATA ?? os.homedir(), "Nivris")
+                : path.join(os.homedir(), "Library/Application Support/Nivris");
+        fs.mkdirSync(dir, { recursive: true });
+        const file = path.join(dir, "install.log");
+        const header = `\n===== ${new Date().toISOString()} — ${title} — ${success ? "OK" : "LỖI"} =====\n`;
+        fs.appendFileSync(file, header + logLines.join("\n") + "\n");
+        return file;
+    } catch {
+        return null;
+    }
+}
+
 export function finish(title: string, success: boolean, successMessage?: string): never {
+    const logFile = writeInstallLog(title, success);
     if (process.platform === "win32") {
-        const body = success ? (successMessage ?? "Hoàn tất.") : logLines.join("\n");
+        const body =
+            (success ? (successMessage ?? "Hoàn tất.") : logLines.join("\n")) +
+            (logFile && !success ? `\n\nNhật ký đầy đủ: ${logFile}` : "");
         if (progressActive()) {
             endProgress(success, body);
             // The progress window is a detached process polling the status file we just wrote —

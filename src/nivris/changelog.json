@@ -1,5 +1,13 @@
 [
     {
+        "version": "1.2.4",
+        "date": "2026-09-12",
+        "changes": [
+            "Trình cài ghi nhật ký ra file install.log để xem lại được khi cài lỗi.",
+            "Helper cập nhật không còn chết vì ghi log khi không có cửa sổ console."
+        ]
+    },
+    {
         "version": "1.2.3",
         "date": "2026-09-12",
         "changes": [
