@@ -1,7 +1,7 @@
 {
     "name": "nivris",
     "private": true,
-    "version": "1.2.17",
+    "version": "1.2.18",
     "type": "module",
     "main": "lib/index.js",
     "license": "UNLICENSED",
@@ -31,6 +31,7 @@
         "esbuild": "^0.28.0",
         "matrix-js-sdk": "^42.3.0",
         "postject": "^1.0.0-alpha.6",
+        "rcedit": "^4.0.1",
         "react": "^19.0.0",
         "rollup": "^4.59.0",
         "rollup-plugin-external-globals": "^0.13.0",

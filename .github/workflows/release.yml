@@ -125,11 +125,14 @@ jobs:
             $bytes = [IO.File]::ReadAllBytes($f)
             $text = [Text.Encoding]::ASCII.GetString($bytes)
             if ($text.Contains("ClosePseudoConsole")) { throw "$f van import ConPTY" }
-            # Subsystem 2 = GUI: no console window, and no QuickEdit freeze with it.
+              # Subsystem 2 = GUI: no console window, and no QuickEdit freeze with it.
             $pe = [BitConverter]::ToUInt32($bytes, 0x3c)
             $sub = [BitConverter]::ToUInt16($bytes, $pe + 24 + 68)
             if ($sub -ne 2) { throw "$f subsystem = $sub, can phai la 2 (GUI)" }
-            Write-Host "$f OK (no ConPTY, GUI subsystem)"
+            # Branding: node.exe's own icon and product name must not survive into what we ship.
+            $info = (Get-Item $f).VersionInfo
+            if ($info.ProductName -ne "N.I.V.R.I.S.") { throw "$f ProductName = '$($info.ProductName)', chua gan branding" }
+            Write-Host "$f OK (no ConPTY, GUI subsystem, ProductName=$($info.ProductName))"
           }
 
       - uses: actions/upload-artifact@v4

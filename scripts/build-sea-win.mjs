@@ -28,6 +28,7 @@ import { execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
+import rcedit from "rcedit";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const [entryArg, outArg] = process.argv.slice(2);
@@ -123,6 +124,33 @@ execFileSync(process.execPath, ["--experimental-sea-config", configPath], { stdi
 
 fs.mkdirSync(path.dirname(outFile), { recursive: true });
 fs.copyFileSync(process.execPath, outFile);
+
+// Branding before injection, not after: rcedit rewrites the PE resource directory, and postject
+// puts the SEA blob in there too — doing it the other way round would rewrite the section the blob
+// lives in. The icon is why this step exists at all (the copied node.exe otherwise ships with
+// Node's own icon, which is what a user sees in Explorer and in the UAC prompt), and the version
+// strings are what Properties → Details shows.
+if (process.platform === "win32") {
+    console.log("[sea] Gắn icon + thông tin phiên bản…");
+    const { version } = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf-8"));
+    const isUninstaller = /uninstall/i.test(path.basename(outFile));
+    await rcedit(outFile, {
+        icon: path.join(root, "assets/icons/AppIcon.ico"),
+        "file-version": `${version}.0`,
+        "product-version": `${version}.0`,
+        "version-string": {
+            ProductName: "N.I.V.R.I.S.",
+            FileDescription: isUninstaller
+                ? "Go cai dat N.I.V.R.I.S. khoi Element Desktop"
+                : "Cai dat N.I.V.R.I.S. cho Element Desktop",
+            CompanyName: "N.I.V.R.I.S.",
+            LegalCopyright: "Copyright 2026 New Vector Ltd.",
+            OriginalFilename: path.basename(outFile),
+        },
+    });
+} else {
+    console.log("[sea] Bo qua buoc gan icon (khong phai Windows).");
+}
 
 console.log("[sea] Inject blob vào node.exe…");
 // postject's own CLI entry, run through node — not `npx postject`. Node 20 refuses to spawnSync a
