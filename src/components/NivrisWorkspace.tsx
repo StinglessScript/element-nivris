@@ -236,6 +236,16 @@ const NivrisWorkspace: React.FC = () => {
     // with this one" gesture is what you want on a người/phòng session too, so every tracker type
     // gets the filter and the per-row toggle. Done state is keyed by message id, so a message that
     // shows up in two sessions is done in both.
+    // Opt-in: for people who treat opening a session as having read it. setManyDone is a no-op when
+    // nothing changes, so this settles after one pass instead of chasing the recompute it triggers.
+    useEffect(() => {
+        if (!settings.autoMarkSeenOnOpen || !activeTracker || !activeMetrics?.matches.length) return;
+        NivrisDoneStore.instance.setManyDone(
+            activeMetrics.matches.map((m) => m.id),
+            true,
+        );
+    }, [settings.autoMarkSeenOnOpen, activeTracker, activeMetrics]);
+
     const matchesFeedFilter = (p: TrackerPriorityItem): boolean => doneIds.has(p.message.id) === (feedFilter === "done");
     // Room tabs (count + which rooms even show up) reflect the current Chưa xem/Đã xem filter —
     // reported live: a room tab kept showing its total count even after every @mention in it got
@@ -767,6 +777,7 @@ const NivrisWorkspace: React.FC = () => {
                     onSave={(s) => setSettings(s)}
                     onChangeIgnoredRooms={(ignoredRoomIds) => setSettings({ ...settings, ignoredRoomIds })}
                     onChangeNotificationsEnabled={(notificationsEnabled) => setSettings({ ...settings, notificationsEnabled })}
+                    onChangeAutoMarkSeen={(autoMarkSeenOnOpen) => setSettings({ ...settings, autoMarkSeenOnOpen })}
                     onChangeReportReminder={(kind, enabled, time) =>
                         setSettings(
                             kind === "morning"
@@ -1671,8 +1682,17 @@ const SettingsPanel: React.FC<{
     onClose: () => void;
     onChangeIgnoredRooms: (ignoredRoomIds: string[]) => void;
     onChangeNotificationsEnabled: (enabled: boolean) => void;
+    onChangeAutoMarkSeen: (enabled: boolean) => void;
     onChangeReportReminder: (kind: "morning" | "evening", enabled: boolean, time: string) => void;
-}> = ({ settings, onSave, onClose, onChangeIgnoredRooms, onChangeNotificationsEnabled, onChangeReportReminder }) => {
+}> = ({
+    settings,
+    onSave,
+    onClose,
+    onChangeIgnoredRooms,
+    onChangeNotificationsEnabled,
+    onChangeAutoMarkSeen,
+    onChangeReportReminder,
+}) => {
     const [tab, setTab] = useState<SettingsTab>("ai");
     const [baseUrl, setBaseUrl] = useState(settings.baseUrl);
     const [apiKey, setApiKey] = useState(settings.apiKey);
@@ -1936,6 +1956,21 @@ const SettingsPanel: React.FC<{
                             )}
                         </div>
 
+
+                        <div>
+                            <div className="mx_NivrisWorkspace_sectionLabel">ĐÁNH DẤU ĐÃ XEM</div>
+                            <label className="mx_NivrisWorkspace_roomIgnoreItem" style={{ border: "none", padding: "4px 0" }}>
+                                <input
+                                    type="checkbox"
+                                    checked={settings.autoMarkSeenOnOpen ?? false}
+                                    onChange={(e) => onChangeAutoMarkSeen(e.target.checked)}
+                                />
+                                <span>Tự đánh dấu đã xem khi mở một session</span>
+                            </label>
+                            <div className="mx_NivrisWorkspace_settingsNote">
+                                Tắt thì badge chỉ hết khi bạn bấm ✓ trên từng tin hoặc "Đánh dấu tất cả đã xem".
+                            </div>
+                        </div>
 
                         <div>
                             <div className="mx_NivrisWorkspace_sectionLabel">NHẮC BÁO CÔNG VIỆC</div>

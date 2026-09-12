@@ -27,6 +27,12 @@ export interface NivrisSettings {
     /** 24h "HH:mm" local time. */
     reportReminderTime: string;
     /**
+     * Mark a session's messages "đã xem" the moment you open it. Off by default: the badge counts
+     * messages you haven't marked, and clearing that just because a session was clicked is the
+     * behaviour this replaced. On for anyone who treats opening as reading.
+     */
+    autoMarkSeenOnOpen?: boolean;
+    /**
      * House rules applied to every generated summary/report, so the three outputs read as one
      * voice instead of three. Blank = use DEFAULT_OUTPUT_STYLE.
      */
@@ -49,6 +55,7 @@ export const DEFAULT_NIVRIS_SETTINGS: NivrisSettings = {
     morningReportReminderTime: "09:00",
     reportReminderEnabled: false,
     reportReminderTime: "17:30",
+    autoMarkSeenOnOpen: false,
     outputStyle: "",
     outputTemplates: {},
 };

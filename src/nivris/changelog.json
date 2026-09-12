@@ -1,5 +1,12 @@
 [
     {
+        "version": "1.2.21",
+        "date": "2026-09-12",
+        "changes": [
+            "Thêm tuỳ chọn tự đánh dấu đã xem khi mở session (Cài đặt → Thông báo), mặc định tắt."
+        ]
+    },
+    {
         "version": "1.2.20",
         "date": "2026-09-12",
         "changes": [
