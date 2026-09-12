@@ -29,7 +29,12 @@ function sleepSync(ms: number): void {
 
 export function log(prefix: string, msg: string): void {
     logLines.push(msg);
-    console.log(`[${prefix}] ${msg}`);
+    try {
+        console.log(`[${prefix}] ${msg}`);
+    } catch {
+        // A GUI-subsystem build has no console attached, so stdout can be an invalid handle —
+        // logLines above is the copy that actually matters (finish() shows it on failure).
+    }
 }
 
 function showWindowsMessageBox(title: string, body: string, isError: boolean): void {

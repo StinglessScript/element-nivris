@@ -118,7 +118,11 @@ jobs:
             $bytes = [IO.File]::ReadAllBytes($f)
             $text = [Text.Encoding]::ASCII.GetString($bytes)
             if ($text.Contains("ClosePseudoConsole")) { throw "$f van import ConPTY" }
-            Write-Host "$f OK"
+            # Subsystem 2 = GUI: no console window, and no QuickEdit freeze with it.
+            $pe = [BitConverter]::ToUInt32($bytes, 0x3c)
+            $sub = [BitConverter]::ToUInt16($bytes, $pe + 24 + 68)
+            if ($sub -ne 2) { throw "$f subsystem = $sub, can phai la 2 (GUI)" }
+            Write-Host "$f OK (no ConPTY, GUI subsystem)"
           }
 
       - uses: actions/upload-artifact@v4

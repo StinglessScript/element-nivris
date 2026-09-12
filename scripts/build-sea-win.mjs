@@ -135,6 +135,37 @@ execFileSync(
     { stdio: "inherit" },
 );
 
+// node.exe is a console-subsystem binary, so this exe would pop a console window where the Bun
+// build (built with --windows-hide-console) did not. Worse than ugly: a Windows console in its
+// default QuickEdit mode FREEZES the process the moment the user clicks in the window, at its next
+// write to stdout — reported live as an install that "stopped" halfway through extracting. Flipping
+// the PE subsystem field from 3 (CONSOLE) to 2 (GUI) gives back the windowless behaviour and takes
+// that hazard away with it. Progress still reaches the user through the PowerShell progress window
+// the installer already puts up (scripts/lib/progress-win.ts).
+function setGuiSubsystem(file) {
+    const buf = fs.readFileSync(file);
+    const peOffset = buf.readUInt32LE(0x3c);
+    if (buf.toString("ascii", peOffset, peOffset + 4) !== "PE\0\0") throw new Error("không phải file PE");
+    const optHeader = peOffset + 24;
+    const magic = buf.readUInt16LE(optHeader);
+    if (magic !== 0x20b) throw new Error(`optional header lạ: 0x${magic.toString(16)}`);
+    const subsystemOffset = optHeader + 68;
+    const current = buf.readUInt16LE(subsystemOffset);
+    if (current === 2) return;
+    if (current !== 3) throw new Error(`subsystem lạ: ${current}`);
+    buf.writeUInt16LE(2, subsystemOffset);
+    fs.writeFileSync(file, buf);
+}
+
+// Only on Windows: elsewhere the host binary is this machine's own node (Mach-O/ELF), which this
+// script can still produce for a smoke test of the bundling steps — just not a PE to patch.
+if (process.platform === "win32") {
+    console.log("[sea] Chuyen subsystem sang GUI (an cua so console)…");
+    setGuiSubsystem(outFile);
+} else {
+    console.log("[sea] Bo qua buoc patch subsystem (khong phai Windows).");
+}
+
 fs.rmSync(workDir, { recursive: true, force: true });
 const mb = (fs.statSync(outFile).size / 1048576).toFixed(1);
 console.log(`[sea] Xong: ${outFile} (${mb} MB, Node ${process.version})`);

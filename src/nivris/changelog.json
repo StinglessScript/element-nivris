@@ -1,5 +1,12 @@
 [
     {
+        "version": "1.2.3",
+        "date": "2026-09-12",
+        "changes": [
+            "Trình cài Windows không còn hiện cửa sổ console — cửa sổ đó ở chế độ chọn văn bản của Windows sẽ đóng băng tiến trình giữa chừng, nhìn như treo máy."
+        ]
+    },
+    {
         "version": "1.2.2",
         "date": "2026-09-12",
         "changes": [
