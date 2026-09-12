@@ -155,10 +155,20 @@ jobs:
       # anything new to download yet, so clicking Update just reapplied the still-current build and
       # looked stuck in a loop until this job caught up. This release `name` only changes once this
       # step actually runs, at the very end of a real successful publish.
+      # The release body carries the newest changelog entry, which is the only way notes for a new
+      # version can reach someone still running the old build (their bundle's changelog stops at
+      # the version they have). Fails the publish if package.json and the changelog disagree.
+      - uses: actions/checkout@v4
+        with:
+          path: repo
+      - name: Generate release notes
+        run: node repo/scripts/release-notes.mjs > release-notes.md
+
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.0.0
           name: "N.I.V.R.I.S. installers (v1) — ${{ github.sha }}"
+          body_path: release-notes.md
           make_latest: "true"
           files: |
             dist/NivrisInstaller-macOS.zip

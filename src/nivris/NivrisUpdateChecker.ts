@@ -80,6 +80,39 @@ async function fetchHelperStatus(): Promise<HelperStatus | null> {
     }
 }
 
+export interface NivrisAvailableRelease {
+    sha: string;
+    /** Missing on releases published before the notes were embedded. */
+    version?: string;
+    date?: string;
+    changes?: string[];
+}
+
+/** The notes for the update, parsed out of the release body's machine-readable block (written by
+ * scripts/release-notes.mjs). Cached alongside the check so the update screen can show "what am I
+ * about to install" without a second round trip. */
+let latestReleaseCache: NivrisAvailableRelease | null = null;
+
+export function getCachedAvailableRelease(): NivrisAvailableRelease | null {
+    return latestReleaseCache;
+}
+
+function parseReleaseNotes(body: unknown): Pick<NivrisAvailableRelease, "version" | "date" | "changes"> {
+    if (typeof body !== "string") return {};
+    const match = /<!--\s*nivris-release-json\s*([\s\S]*?)-->/.exec(body);
+    if (!match) return {};
+    try {
+        const parsed = JSON.parse(match[1].trim()) as { version?: unknown; date?: unknown; changes?: unknown };
+        return {
+            version: typeof parsed.version === "string" ? parsed.version : undefined,
+            date: typeof parsed.date === "string" ? parsed.date : undefined,
+            changes: Array.isArray(parsed.changes) ? parsed.changes.filter((c): c is string => typeof c === "string") : undefined,
+        };
+    } catch {
+        return {};
+    }
+}
+
 async function fetchLatestSha(): Promise<string | null> {
     try {
         // NOT github.com/.../releases/latest/download/nivris-version.json (what the helper actually
@@ -99,9 +132,11 @@ async function fetchLatestSha(): Promise<string | null> {
         // tracks what's truly downloadable right now, not what's merely been committed.
         const res = await fetchWithTimeout(`https://api.github.com/repos/${REPO}/releases/latest`);
         if (!res.ok) return null;
-        const data = (await res.json()) as { name?: unknown };
+        const data = (await res.json()) as { name?: unknown; body?: unknown };
         const match = typeof data.name === "string" ? /\b([0-9a-f]{40})\b/.exec(data.name) : null;
-        return match ? match[1] : null;
+        if (!match) return null;
+        latestReleaseCache = { sha: match[1], ...parseReleaseNotes(data.body) };
+        return match[1];
     } catch {
         return null;
     }

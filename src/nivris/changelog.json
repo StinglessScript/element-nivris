@@ -1,0 +1,30 @@
+[
+    {
+        "version": "1.2.0",
+        "date": "2026-09-12",
+        "changes": [
+            "Thông tin cập nhật chỉ hiện khi kiểm tra thấy bản mới, và hiện mô tả thay đổi của chính bản sắp cài — thay cho danh sách changelog luôn nằm trong cài đặt.",
+            "Ghi chú phát hành được xuất bản kèm bản dựng, nên máy đang chạy bản cũ vẫn đọc được bản mới có gì."
+        ]
+    },
+    {
+        "version": "1.1.0",
+        "date": "2026-09-12",
+        "changes": [
+            "Đánh dấu \"đã xem\" cho mọi loại session, không riêng session @mention — kèm bộ lọc Chưa xem / Đã xem và nút đánh dấu cả phòng.",
+            "Báo cáo cuối ngày được lưu theo ngày và xem lại được: chọn ngày bất kỳ, tạo hoặc tạo lại báo cáo cho ngày đó từ cache tin nhắn.",
+            "Cấu hình được định dạng đầu ra của phân tích, tóm tắt thread và báo cáo — một văn phong chung cộng mẫu riêng cho từng loại.",
+            "Cài đặt chuyển thành hộp thoại có tab và tự động lưu, không còn nút lưu.",
+            "Toàn bộ màu sắc lấy từ design system của Element, chỉ dùng hai nền light/dark mặc định.",
+            "Bỏ tính năng Bảng công việc hôm nay.",
+            "Tăng tốc màn hình chính: bỏ qua vòng cập nhật khi cửa sổ đang ẩn, không vẽ lại khi số liệu không đổi, và dùng chung dữ liệu đã chuẩn hoá giữa các session."
+        ]
+    },
+    {
+        "version": "1.0.0",
+        "date": "2026-09-01",
+        "changes": [
+            "Bản đầu tiên: theo dõi session theo người / phòng / @mention, phân tích và hỏi đáp bằng AI, báo cáo cuối ngày, nhắc báo công việc và tự cập nhật trong ứng dụng."
+        ]
+    }
+]

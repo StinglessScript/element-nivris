@@ -51,7 +51,7 @@ import {
 import { ensureNivrisIngestStarted, rescanToday, runReportReminderCheckNow, startOfToday } from "../nivris/NivrisIngest";
 import { getMatrixClient } from "../matrixClient";
 import { clearAllMessages, getMessagesByThreadRoot, getMessagesSince, type StoredNivrisMessage } from "../nivris/NivrisMessageDb";
-import { NIVRIS_CHANGELOG, NIVRIS_VERSION } from "../nivris/changelog";
+import { NIVRIS_VERSION } from "../nivris/changelog";
 import NivrisReportStore, {
     NIVRIS_REPORT_STORE_CHANGE_EVENT,
     dayRange,
@@ -61,7 +61,7 @@ import NivrisReportStore, {
 } from "../nivris/NivrisReportStore";
 import NivrisEntityPicker, { type NivrisPickerEntity } from "./NivrisEntityPicker";
 import { askAssistant, type AssistantChatMessage } from "../nivris/NivrisAssistant";
-import { getInstalledSha, getUpdateState } from "../nivris/NivrisUpdateChecker";
+import { getCachedAvailableRelease, getInstalledSha, getUpdateState, type NivrisAvailableRelease } from "../nivris/NivrisUpdateChecker";
 import NivrisDoneStore, { NIVRIS_DONE_STORE_CHANGE_EVENT } from "../nivris/NivrisDoneStore";
 import { getModuleApi } from "../nivris/moduleApi";
 
@@ -1672,6 +1672,9 @@ const SettingsPanel: React.FC<{
     const [installedSha, setInstalledSha] = useState<string | null | "loading">("loading");
     const [checkingUpdate, setCheckingUpdate] = useState(false);
     const [updateCheckResult, setUpdateCheckResult] = useState<string | null>(null);
+    // Notes for the version you'd be installing, shown only once a check actually finds one —
+    // the same shape as an OS update screen, rather than a changelog that's always on screen.
+    const [availableRelease, setAvailableRelease] = useState<NivrisAvailableRelease | null>(null);
 
     useEffect(() => {
         void getInstalledSha().then(setInstalledSha);
@@ -1682,6 +1685,7 @@ const SettingsPanel: React.FC<{
         setUpdateCheckResult(null);
         try {
             const state = await getUpdateState(true);
+            setAvailableRelease(state.kind === "new-version" ? getCachedAvailableRelease() : null);
             setUpdateCheckResult(
                 state.kind === "up-to-date"
                     ? "Đã ở bản mới nhất."
@@ -2098,30 +2102,34 @@ const SettingsPanel: React.FC<{
                                 </button>
                                 {updateCheckResult && <span className="mx_NivrisWorkspace_settingsSavedNote">{updateCheckResult}</span>}
                             </div>
-                        </div>
 
-
-                        <div>
-                            <div className="mx_NivrisWorkspace_sectionLabel">CÓ GÌ MỚI</div>
-                            <div className="mx_NivrisWorkspace_changelog">
-                                {NIVRIS_CHANGELOG.map((release) => (
-                                    <section className="mx_NivrisWorkspace_changelogRelease" key={release.version}>
-                                        <div className="mx_NivrisWorkspace_changelogHead">
-                                            <span className="mx_NivrisWorkspace_changelogVersion">v{release.version}</span>
-                                            {release.version === NIVRIS_VERSION && (
-                                                <span className="mx_NivrisWorkspace_changelogCurrent">ĐANG DÙNG</span>
-                                            )}
-                                            <span className="mx_NivrisWorkspace_changelogDate">{release.date}</span>
-                                        </div>
+                            {availableRelease && (
+                                <div className="mx_NivrisWorkspace_changelog">
+                                    <div className="mx_NivrisWorkspace_changelogHead">
+                                        <span className="mx_NivrisWorkspace_changelogVersion">
+                                            {availableRelease.version ? `v${availableRelease.version}` : "Bản mới"}
+                                        </span>
+                                        <span className="mx_NivrisWorkspace_changelogCurrent">SẮP CÀI</span>
+                                        {availableRelease.date && (
+                                            <span className="mx_NivrisWorkspace_changelogDate">{availableRelease.date}</span>
+                                        )}
+                                    </div>
+                                    {availableRelease.changes?.length ? (
                                         <ul className="mx_NivrisWorkspace_changelogList">
-                                            {release.changes.map((line, i) => (
+                                            {availableRelease.changes.map((line, i) => (
                                                 <li key={i}>{line}</li>
                                             ))}
                                         </ul>
-                                    </section>
-                                ))}
-                            </div>
+                                    ) : (
+                                        <div className="mx_NivrisWorkspace_settingsNote">
+                                            Bản này không kèm mô tả thay đổi (phát hành trước khi có tính năng ghi chú
+                                            bản phát hành).
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                         </div>
+
 
                         <div className="mx_NivrisWorkspace_settingsNote">
                             API KEY LƯU TRONG LOCALSTORAGE CỦA MÁY BẠN.
