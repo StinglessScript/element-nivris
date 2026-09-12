@@ -1,5 +1,12 @@
 [
     {
+        "version": "1.2.16",
+        "date": "2026-09-12",
+        "changes": [
+            "Đổi tên session cố định '@mình chưa phản hồi' thành '@ bạn' — nó liệt kê mọi tin nhắc tên bạn, không chỉ tin chưa trả lời."
+        ]
+    },
+    {
         "version": "1.2.15",
         "date": "2026-09-12",
         "changes": [

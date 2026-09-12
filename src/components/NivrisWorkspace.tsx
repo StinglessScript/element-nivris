@@ -100,7 +100,10 @@ const TYPE_LABEL: Record<NivrisTrackerType, string> = {
 };
 
 const FIXED_LABEL: Record<Extract<NivrisTrackerType, "mention" | "priority">, string> = {
-    mention: "@mình chưa phản hồi",
+    // Not "@mình chưa phản hồi": this session lists every message that mentions you (see
+    // getMentions — it filters on mentionsMe and nothing else), replied-to or not. Whether you've
+    // handled one is what the Chưa xem / Đã xem filter is for.
+    mention: "@ bạn",
     priority: "Việc ưu tiên cao",
 };
 
