@@ -1,5 +1,12 @@
 [
     {
+        "version": "1.2.22",
+        "date": "2026-09-12",
+        "changes": [
+            "Sửa lỗi tuỳ chọn tự đánh dấu đã xem quét cả session — giờ chỉ áp cho phòng đang mở."
+        ]
+    },
+    {
         "version": "1.2.21",
         "date": "2026-09-12",
         "changes": [

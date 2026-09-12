@@ -236,16 +236,6 @@ const NivrisWorkspace: React.FC = () => {
     // with this one" gesture is what you want on a người/phòng session too, so every tracker type
     // gets the filter and the per-row toggle. Done state is keyed by message id, so a message that
     // shows up in two sessions is done in both.
-    // Opt-in: for people who treat opening a session as having read it. setManyDone is a no-op when
-    // nothing changes, so this settles after one pass instead of chasing the recompute it triggers.
-    useEffect(() => {
-        if (!settings.autoMarkSeenOnOpen || !activeTracker || !activeMetrics?.matches.length) return;
-        NivrisDoneStore.instance.setManyDone(
-            activeMetrics.matches.map((m) => m.id),
-            true,
-        );
-    }, [settings.autoMarkSeenOnOpen, activeTracker, activeMetrics]);
-
     const matchesFeedFilter = (p: TrackerPriorityItem): boolean => doneIds.has(p.message.id) === (feedFilter === "done");
     // Room tabs (count + which rooms even show up) reflect the current Chưa xem/Đã xem filter —
     // reported live: a room tab kept showing its total count even after every @mention in it got
@@ -270,6 +260,16 @@ const NivrisWorkspace: React.FC = () => {
     // never on the other room tabs.
     const activeFeedGroup = visibleFeedGroups.find((g) => g.roomId === activeRoomId) ?? null;
     const visibleFeedItems = activeFeedGroup?.items ?? [];
+
+    // Opt-in: for people who treat opening a session as having read it. Scoped to the room tab on
+    // screen, not the whole session — the first version marked every match across every room, so
+    // opening a session wiped out rooms the user never looked at. Switching tabs marks that tab,
+    // which is the same rule applied to whatever is actually in front of you.
+    const visibleFeedIds = visibleFeedItems.map((p) => p.message.id).join("|");
+    useEffect(() => {
+        if (!settings.autoMarkSeenOnOpen || feedFilter !== "open" || !visibleFeedIds) return;
+        NivrisDoneStore.instance.setManyDone(visibleFeedIds.split("|"), true);
+    }, [settings.autoMarkSeenOnOpen, feedFilter, visibleFeedIds]);
 
     const onPickEntity = (entity: NivrisPickerEntity): void => {
         const type: NivrisTrackerType = entity.kind === "user" ? "boss" : "group";
@@ -1968,7 +1968,8 @@ const SettingsPanel: React.FC<{
                                 <span>Tự đánh dấu đã xem khi mở một session</span>
                             </label>
                             <div className="mx_NivrisWorkspace_settingsNote">
-                                Tắt thì badge chỉ hết khi bạn bấm ✓ trên từng tin hoặc "Đánh dấu tất cả đã xem".
+                                Chỉ áp cho phòng đang mở trong session, không phải mọi phòng. Tắt thì badge chỉ hết
+                                khi bạn bấm ✓ trên từng tin hoặc "Đánh dấu tất cả đã xem".
                             </div>
                         </div>
 
