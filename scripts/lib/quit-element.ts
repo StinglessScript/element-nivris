@@ -5,6 +5,8 @@ SPDX-License-Identifier: AGPL-3.0-only OR GPL-3.0-only OR LicenseRef-Element-Com
 Please see LICENSE files in the repository root for full details.
 */
 
+import { spawnSync } from "node:child_process";
+
 // Best-effort: quits Element Desktop if it's currently running, before install/uninstall touches
 // its files — avoids the EBUSY dance of asking the user to manually quit it (Element likes to
 // minimize to the tray instead of exiting on window-close, which trips people up). Tries a graceful
@@ -17,12 +19,11 @@ Please see LICENSE files in the repository root for full details.
 // polling for Element to exit, so omitting this turns into a rapid strobe of console flashes.
 function isRunningWindows(): boolean {
     try {
-        const out = Bun.spawnSync(["tasklist", "/FI", "IMAGENAME eq Element.exe", "/FO", "CSV", "/NH"], {
-            stdout: "pipe",
-            stderr: "ignore",
+        const out = spawnSync("tasklist", ["/FI", "IMAGENAME eq Element.exe", "/FO", "CSV", "/NH"], {
+            stdio: ["ignore", "pipe", "ignore"],
             windowsHide: true,
         });
-        return new TextDecoder().decode(out.stdout).toLowerCase().includes("element.exe");
+        return (out.stdout?.toString() ?? "").toLowerCase().includes("element.exe");
     } catch {
         return false;
     }
@@ -30,7 +31,7 @@ function isRunningWindows(): boolean {
 
 function isRunningMac(): boolean {
     try {
-        return Bun.spawnSync(["pgrep", "-x", "Element"], { stdout: "ignore", stderr: "ignore" }).exitCode === 0;
+        return spawnSync("pgrep", ["-x", "Element"], { stdio: "ignore" }).status === 0;
     } catch {
         return false;
     }
@@ -55,13 +56,13 @@ export async function quitElementIfRunning(onStatus?: (msg: string) => void): Pr
         if (!isRunningWindows()) return true;
         onStatus?.("Element đang chạy — đang tắt...");
         try {
-            Bun.spawnSync(["taskkill", "/IM", "Element.exe", "/T"], { stdout: "ignore", stderr: "ignore", windowsHide: true });
+            spawnSync("taskkill", ["/IM", "Element.exe", "/T"], { stdio: "ignore", windowsHide: true });
         } catch {
             // ignore — waitUntilClosed below decides whether this actually worked
         }
         if (await waitUntilClosed(isRunningWindows, 5000)) return true;
         try {
-            Bun.spawnSync(["taskkill", "/IM", "Element.exe", "/T", "/F"], { stdout: "ignore", stderr: "ignore", windowsHide: true });
+            spawnSync("taskkill", ["/IM", "Element.exe", "/T", "/F"], { stdio: "ignore", windowsHide: true });
         } catch {
             // ignore
         }
@@ -72,13 +73,13 @@ export async function quitElementIfRunning(onStatus?: (msg: string) => void): Pr
         if (!isRunningMac()) return true;
         onStatus?.("Element đang chạy — đang tắt...");
         try {
-            Bun.spawnSync(["osascript", "-e", 'tell application "Element" to quit'], { stdout: "ignore", stderr: "ignore" });
+            spawnSync("osascript", ["-e", 'tell application "Element" to quit'], { stdio: "ignore" });
         } catch {
             // ignore
         }
         if (await waitUntilClosed(isRunningMac, 5000)) return true;
         try {
-            Bun.spawnSync(["pkill", "-x", "Element"], { stdout: "ignore", stderr: "ignore" });
+            spawnSync("pkill", ["-x", "Element"], { stdio: "ignore" });
         } catch {
             // ignore
         }

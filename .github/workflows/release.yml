@@ -80,15 +80,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
+      # Node 20, not 22, and not Bun: this exe is hosted by whatever node.exe builds it (a SEA blob
+      # is version-locked to its runtime), and the v20 line is the one that still runs on the older
+      # Windows 10 builds this binary exists to serve. Bun's own compiled output imports
+      # ClosePseudoConsole (Windows 10 1809+), which is exactly what broke there — see
+      # scripts/build-sea-win.mjs.
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 20
 
-      - run: corepack enable
       - run: npm install
 
       # See scripts/build-standalone-mac.sh's matching step for why these env vars.
@@ -100,27 +100,26 @@ jobs:
           NIVRIS_UPDATE_PORT: "47291"
 
       - name: Compile installer.exe
-        run: >
-          bun build --compile
-          --windows-hide-console
-          --windows-icon=assets/icons/AppIcon.ico
-          --windows-title="N.I.V.R.I.S. Installer"
-          --windows-publisher="N.I.V.R.I.S."
-          --windows-description="Cai dat N.I.V.R.I.S. cho Element Desktop"
-          --define NIVRIS_BUILD_SHA="\"${{ github.sha }}\""
-          ./scripts/standalone-installer.ts
-          --outfile dist/NivrisInstaller-Windows.exe
+        run: node scripts/build-sea-win.mjs scripts/standalone-installer.ts dist/NivrisInstaller-Windows.exe
+        env:
+          NIVRIS_BUILD_SHA: ${{ github.sha }}
 
       - name: Compile uninstaller.exe
-        run: >
-          bun build --compile
-          --windows-hide-console
-          --windows-icon=assets/icons/AppIcon.ico
-          --windows-title="N.I.V.R.I.S. Uninstaller"
-          --windows-publisher="N.I.V.R.I.S."
-          --windows-description="Go cai dat N.I.V.R.I.S. khoi Element Desktop"
-          ./scripts/standalone-uninstaller.ts
-          --outfile dist/NivrisUninstaller-Windows.exe
+        run: node scripts/build-sea-win.mjs scripts/standalone-uninstaller.ts dist/NivrisUninstaller-Windows.exe
+        env:
+          NIVRIS_BUILD_SHA: ${{ github.sha }}
+
+      # Proves the shipped binary no longer imports the API that made the old one unloadable on
+      # Windows 10 before build 17763 — a build-time assert, since CI has no such machine to test on.
+      - name: Check the exe has no ConPTY imports
+        shell: pwsh
+        run: |
+          foreach ($f in @("dist/NivrisInstaller-Windows.exe", "dist/NivrisUninstaller-Windows.exe")) {
+            $bytes = [IO.File]::ReadAllBytes($f)
+            $text = [Text.Encoding]::ASCII.GetString($bytes)
+            if ($text.Contains("ClosePseudoConsole")) { throw "$f van import ConPTY" }
+            Write-Host "$f OK"
+          }
 
       - uses: actions/upload-artifact@v4
         with:

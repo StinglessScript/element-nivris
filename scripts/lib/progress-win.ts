@@ -5,6 +5,8 @@ SPDX-License-Identifier: AGPL-3.0-only OR GPL-3.0-only OR LicenseRef-Element-Com
 Please see LICENSE files in the repository root for full details.
 */
 
+import { spawn } from "node:child_process";
+
 // Windows-only progress window for the standalone installer/uninstaller. The compiled .exe is
 // built with --windows-hide-console, so there is no window at all by default — running it just
 // looks like nothing happened for a second, then (with the old code) a single MessageBox popped
@@ -145,12 +147,14 @@ export function startProgress(title: string): void {
             .join(" ");
         const vbsFile = path.join(dir, "launch.vbs");
         writeUtf16LeBom(vbsFile, `CreateObject("WScript.Shell").Run "${vbsEscape(psCommandLine)}", 0, False\n`);
-        Bun.spawn(["wscript.exe", "//B", "//NoLogo", vbsFile], {
-            stdout: "ignore",
-            stderr: "ignore",
-            stdin: "ignore",
+        // detached + unref so the progress window outlives this process's own exit, which is the
+        // whole point of it — finish() writes the final status and quits while the window is still
+        // up to show it.
+        spawn("wscript.exe", ["//B", "//NoLogo", vbsFile], {
+            stdio: "ignore",
             windowsHide: true,
-        });
+            detached: true,
+        }).unref();
     } catch {
         // PowerShell/WScript missing or unspawnable — fall back to no progress window at all;
         // finish() still needs to show *something*, handled by its own fallback when statusFile is null.

@@ -15,9 +15,17 @@ Please see LICENSE files in the repository root for full details.
 //     that window never came up (PowerShell missing, etc.) fall back to a one-off MessageBox here.
 
 import fs from "node:fs";
+import { spawnSync } from "node:child_process";
+
 import { endProgress, progressActive } from "./progress-win";
 
 const logLines: string[] = [];
+
+/** Node has no sleepSync; Atomics.wait on a throwaway buffer blocks the thread without spinning.
+ * Used in exactly one place, where the process is about to exit anyway. */
+function sleepSync(ms: number): void {
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
 
 export function log(prefix: string, msg: string): void {
     logLines.push(msg);
@@ -29,15 +37,15 @@ function showWindowsMessageBox(title: string, body: string, isError: boolean): v
     const titleEsc = title.replace(/'/g, "''");
     const icon = isError ? "Error" : "Information";
     try {
-        Bun.spawnSync(
+        spawnSync(
+            "powershell",
             [
-                "powershell",
                 "-NoProfile",
                 "-NonInteractive",
                 "-Command",
                 `Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('${esc}', '${titleEsc}', [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::${icon})`,
             ],
-            { stdout: "ignore", stderr: "ignore", windowsHide: true },
+            { stdio: "ignore", windowsHide: true },
         );
     } catch {
         // Best-effort — if PowerShell somehow isn't available, there's nothing else we can do
@@ -58,7 +66,7 @@ export function finish(title: string, success: boolean, successMessage?: string)
             // The progress window is a detached process polling the status file we just wrote —
             // give it a moment to pick up the final update before this process exits, since
             // nothing else keeps it alive.
-            Bun.sleepSync(150);
+            sleepSync(150);
         } else {
             showWindowsMessageBox(title, body, !success);
         }

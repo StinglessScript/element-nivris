@@ -1,5 +1,13 @@
 [
     {
+        "version": "1.2.2",
+        "date": "2026-09-12",
+        "changes": [
+            "Bản cài đặt Windows (.exe) chuyển sang Node nên chạy được trên Windows 10 đời cũ — máy báo lỗi \"Entry Point Not Found — ClosePseudoConsole\" giờ cài được.",
+            "File .bat tự tải Node portable khi máy chưa có, không cần cài Node trước."
+        ]
+    },
+    {
         "version": "1.2.1",
         "date": "2026-09-12",
         "changes": [
