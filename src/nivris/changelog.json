@@ -1,5 +1,12 @@
 [
     {
+        "version": "1.2.7",
+        "date": "2026-09-12",
+        "changes": [
+            "Cửa sổ cài đặt trên Windows đổi sang giao diện lớn có logo, tiêu đề và thanh tiến trình phẳng."
+        ]
+    },
+    {
         "version": "1.2.6",
         "date": "2026-09-12",
         "changes": [

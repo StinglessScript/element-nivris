@@ -20,6 +20,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+import { LOGO_PNG_BASE64 } from "./logo-base64";
+
 type Status = { percent: number; label: string; done: boolean; ok?: boolean; message?: string; logPath?: string };
 
 let statusFile: string | null = null;
@@ -29,33 +31,76 @@ param([string]$StatusFile, [string]$Title)
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
+$TEAL = [System.Drawing.Color]::FromArgb(10, 124, 122)
+$INK = [System.Drawing.Color]::FromArgb(11, 27, 38)
+$MUTED = [System.Drawing.Color]::FromArgb(90, 112, 128)
+$TRACK = [System.Drawing.Color]::FromArgb(228, 233, 237)
+
 $form = New-Object System.Windows.Forms.Form
 $form.Text = $Title
 $form.Font = New-Object System.Drawing.Font('Segoe UI', 9.5)
 $form.BackColor = [System.Drawing.Color]::White
-$form.ClientSize = New-Object System.Drawing.Size(440, 130)
+$form.ClientSize = New-Object System.Drawing.Size(720, 460)
 $form.FormBorderStyle = 'FixedDialog'
 $form.MaximizeBox = $false
 $form.MinimizeBox = $false
 $form.StartPosition = 'CenterScreen'
 $form.TopMost = $true
 
+# Embedded at write time (see writeUtf8Bom's call site) — a single-file installer has no asset
+# directory for this window to read an image out of.
+$logoB64 = '__LOGO_B64__'
+try {
+    $bytes = [System.Convert]::FromBase64String($logoB64)
+    $logo = New-Object System.Windows.Forms.PictureBox
+    $logo.Image = [System.Drawing.Image]::FromStream((New-Object System.IO.MemoryStream(,$bytes)))
+    $logo.SizeMode = 'Zoom'
+    $logo.SetBounds(44, 36, 52, 52)
+    $form.Controls.Add($logo)
+} catch {
+    # No logo is a cosmetic loss; never a reason to fail the install.
+}
+
+$brand = New-Object System.Windows.Forms.Label
+$brand.Text = 'N.I.V.R.I.S.'
+$brand.Font = New-Object System.Drawing.Font('Consolas', 12, [System.Drawing.FontStyle]::Bold)
+$brand.ForeColor = $INK
+$brand.SetBounds(110, 44, 220, 22)
+$form.Controls.Add($brand)
+
+$sub = New-Object System.Windows.Forms.Label
+$sub.Text = 'Module cho Element Desktop'
+$sub.ForeColor = $MUTED
+$sub.SetBounds(112, 66, 320, 20)
+$form.Controls.Add($sub)
+
+$heading = New-Object System.Windows.Forms.Label
+$heading.Text = 'Vui long doi trong giay lat...'
+$heading.Font = New-Object System.Drawing.Font('Segoe UI', 19, [System.Drawing.FontStyle]::Bold)
+$heading.ForeColor = $INK
+$heading.SetBounds(44, 150, 640, 40)
+$form.Controls.Add($heading)
+
+# A flat two-panel bar rather than Windows' own ProgressBar, which always draws its themed 3D
+# chrome and cannot be made to look like the rest of this.
+$track = New-Object System.Windows.Forms.Panel
+$track.BackColor = $TRACK
+$track.SetBounds(44, 220, 632, 6)
+$form.Controls.Add($track)
+
+$fill = New-Object System.Windows.Forms.Panel
+$fill.BackColor = $TEAL
+$fill.SetBounds(0, 0, 0, 6)
+$track.Controls.Add($fill)
+
 $label = New-Object System.Windows.Forms.Label
 $label.Text = 'Dang chuan bi...'
-$label.ForeColor = [System.Drawing.Color]::FromArgb(40, 40, 40)
-$label.SetBounds(24, 28, 392, 22)
+$label.ForeColor = $MUTED
+$label.SetBounds(44, 238, 632, 22)
 $form.Controls.Add($label)
 
-$bar = New-Object System.Windows.Forms.ProgressBar
-$bar.SetBounds(24, 60, 392, 22)
-$bar.Minimum = 0
-$bar.Maximum = 100
-$form.Controls.Add($bar)
-
-# The result view, built up front and hidden: this window is already on screen and already owns the
-# foreground, so turning IT into the result dialog is what guarantees the user sees an ending. An
-# earlier version handed that job to a second process the installer spawned on its way out, and when
-# that failed to appear there was nothing at all to say the run had finished.
+# Result view, hidden until the run finishes — this window stays up and becomes the ending, rather
+# than handing that job to another process that might never appear.
 $script:LogPath = ''
 
 $msg = New-Object System.Windows.Forms.TextBox
@@ -64,7 +109,8 @@ $msg.ReadOnly = $true
 $msg.ScrollBars = 'Vertical'
 $msg.BorderStyle = 'None'
 $msg.BackColor = [System.Drawing.Color]::White
-$msg.SetBounds(24, 20, 560, 150)
+$msg.ForeColor = $INK
+$msg.SetBounds(44, 210, 632, 160)
 $msg.Visible = $false
 $form.Controls.Add($msg)
 
@@ -77,21 +123,27 @@ function Read-Log {
 
 $panel = New-Object System.Windows.Forms.FlowLayoutPanel
 $panel.Dock = 'Bottom'
-$panel.Height = 48
+$panel.Height = 56
+$panel.BackColor = [System.Drawing.Color]::White
 $panel.FlowDirection = 'RightToLeft'
-$panel.Padding = New-Object System.Windows.Forms.Padding(8, 8, 8, 8)
+$panel.Padding = New-Object System.Windows.Forms.Padding(28, 12, 44, 12)
 $panel.Visible = $false
 
 $btnClose = New-Object System.Windows.Forms.Button
 $btnClose.Text = 'Dong'
-$btnClose.Width = 96
-$btnClose.Height = 30
+$btnClose.Width = 104
+$btnClose.Height = 32
+$btnClose.FlatStyle = 'Flat'
+$btnClose.BackColor = $TEAL
+$btnClose.ForeColor = [System.Drawing.Color]::White
+$btnClose.FlatAppearance.BorderSize = 0
 $btnClose.Add_Click({ $form.Close() })
 
 $btnView = New-Object System.Windows.Forms.Button
 $btnView.Text = 'Xem nhat ky'
-$btnView.Width = 120
-$btnView.Height = 30
+$btnView.Width = 126
+$btnView.Height = 32
+$btnView.FlatStyle = 'Flat'
 $btnView.Add_Click({
     $w = New-Object System.Windows.Forms.Form
     $w.Text = 'Nhat ky cai dat'
@@ -112,8 +164,9 @@ $btnView.Add_Click({
 
 $btnCopy = New-Object System.Windows.Forms.Button
 $btnCopy.Text = 'Sao chep nhat ky'
-$btnCopy.Width = 140
-$btnCopy.Height = 30
+$btnCopy.Width = 146
+$btnCopy.Height = 32
+$btnCopy.FlatStyle = 'Flat'
 $btnCopy.Add_Click({
     [System.Windows.Forms.Clipboard]::SetText((Read-Log))
     [System.Windows.Forms.MessageBox]::Show('Da sao chep nhat ky vao clipboard.', 'OK') | Out-Null
@@ -127,18 +180,19 @@ $timer.Interval = 100
 $timer.Add_Tick({
     if (-not (Test-Path $StatusFile)) { return }
     # Get-Content's default encoding on Windows PowerShell 5.1 is the system codepage, not UTF-8 —
-    # since the .exe (via Bun/Node) always writes this file as UTF-8, reading it any other way
-    # mangles the Vietnamese text. Read the bytes and decode explicitly instead.
+    # since the .exe (via Node) always writes this file as UTF-8, reading it any other way mangles
+    # the Vietnamese text. Read the bytes and decode explicitly instead.
     try { $s = [System.IO.File]::ReadAllText($StatusFile, [System.Text.Encoding]::UTF8) | ConvertFrom-Json } catch { return }
-    $bar.Value = [Math]::Min([Math]::Max([int]$s.percent, 0), 100)
+    $pct = [Math]::Min([Math]::Max([int]$s.percent, 0), 100)
+    $fill.Width = [int]($track.Width * $pct / 100)
     $label.Text = $s.label
     if ($s.done) {
         $timer.Stop()
         $script:LogPath = $s.logPath
+        $track.Visible = $false
         $label.Visible = $false
-        $bar.Visible = $false
-        $form.Text = if ($s.ok) { $Title } else { "$Title - Loi" }
-        $form.ClientSize = New-Object System.Drawing.Size(608, 230)
+        $heading.Text = if ($s.ok) { 'Da cai xong' } else { 'Cai dat gap loi' }
+        $heading.ForeColor = if ($s.ok) { $TEAL } else { [System.Drawing.Color]::FromArgb(196, 68, 63) }
         $msg.Text = $s.message
         $msg.Visible = $true
         $panel.Visible = $true
@@ -151,8 +205,8 @@ $form.Add_Shown({ $form.Activate() })
 
 # This script and its status file live in a per-run temp dir (see startProgress() below) that
 # nothing else ever cleans up — the installer process that created it is long gone by the time the
-# user dismisses the MessageBox above, so this detached script is the only thing left that still
-# knows its own directory and the right moment (after the dialog closes, not before) to remove it.
+# user closes this window, so this detached script is the only thing left that still knows its own
+# directory and the right moment (after the window closes, not before) to remove it.
 Remove-Item -Recurse -Force -ErrorAction SilentlyContinue (Split-Path $StatusFile -Parent)
 `;
 
@@ -198,7 +252,7 @@ export function startProgress(title: string): void {
         const dir = fs.mkdtempSync(path.join(os.tmpdir(), "nivris-progress-"));
         statusFile = path.join(dir, "status.json");
         const scriptFile = path.join(dir, "progress.ps1");
-        writeUtf8Bom(scriptFile, PS_SCRIPT);
+        writeUtf8Bom(scriptFile, PS_SCRIPT.replace("__LOGO_B64__", LOGO_PNG_BASE64));
         writeStatus({ percent: 0, label: "Dang chuan bi...", done: false });
 
         // Launched via WScript.Shell.Run (window style 0 = hidden) rather than
