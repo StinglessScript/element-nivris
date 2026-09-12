@@ -14,13 +14,16 @@ Please see LICENSE files in the repository root for full details.
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { realHomeDir } from "./apply-update.mjs";
 
 const LAUNCH_AGENT_LABEL = "com.nivris.updater";
 const WIN_TASK_NAME = "NivrisUpdater";
 const SYSTEMD_UNIT = "nivris-updater.service";
 const HELPER_PORT = 47291;
+
+const WIN_RUN_KEY = "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run";
+const WIN_RUN_VALUE = "NivrisUpdateHelper";
 
 export function helperInstallDir() {
     if (process.platform === "darwin") return path.join(realHomeDir(), "Library/Application Support/Nivris/helper");
@@ -93,6 +96,14 @@ export function killByPidFile(dir) {
  * `args: []` for the standalone-installer path (no separate interpreter, no `scripts/` checkout on
  * disk for it to run from — see standalone-installer.ts's installHelperFilesStandalone()).
  */
+/**
+ * Registers (and starts) the background update helper.
+ *
+ * @returns {{ ok: boolean, autostart: boolean, detail?: string }} `ok` is whether the helper is
+ * actually running now, `autostart` whether it will come back by itself after a reboot. The caller
+ * needs both to avoid the thing this used to do: report a clean install and promise in-app updates
+ * while nothing at all had been registered.
+ */
 export function registerHelperService({ execPath, args = [], helperDir, log }) {
     if (process.platform === "darwin") {
         const plistPath = launchAgentPlistPath();
@@ -125,7 +136,7 @@ ${argElements}
         spawnSync("launchctl", ["unload", plistPath], { stdio: "ignore" }); // ignore failure — may not be loaded yet
         spawnSync("launchctl", ["load", plistPath], { stdio: "ignore" });
         log?.("Đã đăng ký LaunchAgent cho helper cập nhật.");
-        return;
+        return { ok: true, autostart: true };
     }
 
     if (process.platform === "win32") {
@@ -160,7 +171,10 @@ ${argElements}
         // literal as `""`, so quoting it for shell.Run's own argument means doubling those two.
         const vbsEscaped = `"${cmdPath}"`.replace(/"/g, '""');
         fs.writeFileSync(vbsPath, `Set shell = CreateObject("WScript.Shell")\r\nshell.Run "${vbsEscaped}", 0, False\r\n`);
-        spawnSync("schtasks", ["/delete", "/tn", WIN_TASK_NAME, "/f"], { stdio: "ignore" }); // ignore failure — may not exist yet
+        spawnSync("schtasks", ["/delete", "/tn", WIN_TASK_NAME, "/f"], { stdio: "ignore" });
+        // The Run-key fallback (used where schtasks is denied) has to come out here too, or an
+        // uninstall leaves something trying to start a helper that no longer exists.
+        spawnSync("reg", ["delete", WIN_RUN_KEY, "/v", WIN_RUN_VALUE, "/f"], { stdio: "ignore" }); // ignore failure — may not exist yet
         const createRes = spawnSync("schtasks", [
             "/create",
             "/tn",
@@ -174,24 +188,68 @@ ${argElements}
             "/f",
         ], { encoding: "utf-8" });
 
+        // Start it now, whatever happens with autostart below: this is what makes the helper work
+        // in the session the user is standing in front of, and it needs no privileges at all.
+        const startNow = () => {
+            try {
+                spawn("wscript.exe", ["//B", "//NoLogo", vbsPath], {
+                    stdio: "ignore",
+                    windowsHide: true,
+                    detached: true,
+                }).unref();
+                return true;
+            } catch {
+                return false;
+            }
+        };
+
         // Previously unchecked — a failed /create (bad quoting, permissions, locale, ...) used to
         // silently leave no scheduled task registered at all while still logging success, which is
         // indistinguishable from a working install until the update banner mysteriously never
         // connects to the helper. Surface the real error instead of guessing at it after the fact.
         if (createRes.status !== 0) {
             const detail = (createRes.stderr || createRes.stdout || "").toString().trim() || `mã lỗi ${createRes.status}`;
-            log?.(`LỖI đăng ký Scheduled Task cho helper cập nhật: ${detail}`);
-            return;
+            log?.(`Không đăng ký được Scheduled Task: ${detail}`);
+
+            // Reported live: "ERROR: Access is denied." from schtasks on a machine whose policy
+            // doesn't let this user create tasks at all. The HKCU Run key is the fallback that
+            // needs no privileges — it's per-user, writable without elevation, and starts the same
+            // hidden .vbs at logon. Strictly weaker (no restart-on-failure), but the alternative
+            // was no background helper and therefore no in-app updates.
+            const regRes = spawnSync(
+                "reg",
+                [
+                    "add",
+                    WIN_RUN_KEY,
+                    "/v",
+                    WIN_RUN_VALUE,
+                    "/t",
+                    "REG_SZ",
+                    "/d",
+                    `wscript.exe //B "${vbsPath}"`,
+                    "/f",
+                ],
+                { encoding: "utf-8" },
+            );
+            if (regRes.status !== 0) {
+                const regDetail = (regRes.stderr || regRes.stdout || "").toString().trim() || `mã lỗi ${regRes.status}`;
+                log?.(`Không đăng ký được tự khởi động qua Registry: ${regDetail}`);
+                return startNow()
+                    ? { ok: true, autostart: false, detail: "helper đang chạy nhưng sẽ không tự bật lại sau khi khởi động lại máy" }
+                    : { ok: false, autostart: false, detail };
+            }
+            log?.("Đã đăng ký tự khởi động cho helper qua Registry (Run key).");
+            return { ok: startNow(), autostart: true };
         }
 
         const runRes = spawnSync("schtasks", ["/run", "/tn", WIN_TASK_NAME], { encoding: "utf-8" });
         if (runRes.status !== 0) {
             const detail = (runRes.stderr || runRes.stdout || "").toString().trim() || `mã lỗi ${runRes.status}`;
             log?.(`Đã đăng ký Scheduled Task nhưng chạy thử thất bại: ${detail}`);
-            return;
+            return { ok: startNow(), autostart: true, detail };
         }
         log?.("Đã đăng ký Scheduled Task cho helper cập nhật.");
-        return;
+        return { ok: true, autostart: true };
     }
 
     if (process.platform === "linux") {
@@ -212,8 +270,10 @@ WantedBy=default.target
         spawnSync("systemctl", ["--user", "daemon-reload"], { stdio: "ignore" });
         spawnSync("systemctl", ["--user", "enable", "--now", SYSTEMD_UNIT], { stdio: "ignore" });
         log?.("Đã đăng ký systemd --user unit cho helper cập nhật.");
-        return;
+        return { ok: true, autostart: true };
     }
+
+    return { ok: false, autostart: false, detail: `nền tảng không hỗ trợ: ${process.platform}` };
 }
 
 export function unregisterHelperService({ log }) {

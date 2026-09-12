@@ -1,5 +1,13 @@
 [
     {
+        "version": "1.2.8",
+        "date": "2026-09-12",
+        "changes": [
+            "Máy không cho tạo Scheduled Task (Access is denied) vẫn bật được tự cập nhật — chuyển sang đăng ký qua Registry Run key và khởi động helper ngay.",
+            "Thông báo cài xong nói đúng trạng thái tự cập nhật thay vì luôn hứa là đã bật."
+        ]
+    },
+    {
         "version": "1.2.7",
         "date": "2026-09-12",
         "changes": [

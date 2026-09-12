@@ -265,7 +265,7 @@ async function main(): Promise<void> {
     fs.writeFileSync(configPath, JSON.stringify(config, null, 4));
     log(`Đã cập nhật config: ${configPath}`);
 
-    registerHelperService({ execPath: helperExecPath, args: [RUN_HELPER_FLAG], helperDir, log });
+    const helper = registerHelperService({ execPath: helperExecPath, args: [RUN_HELPER_FLAG], helperDir, log });
 
     // quitElementIfRunning() at the top of main() should already have closed it, but on Windows
     // that step can silently fail to catch every process — closing the *window* isn't the same as
@@ -274,11 +274,28 @@ async function main(): Promise<void> {
     // freshly-patched one look broken until it was fully killed and reopened by hand. Say so
     // explicitly rather than assuming the quit above always caught it.
     log("XONG. Kiểm tra Element đã tắt hẳn chưa (Task Manager, không còn tiến trình 'Element' nào — Windows hay ẩn nó xuống khay hệ thống thay vì thoát) rồi mở lại để thấy N.I.V.R.I.S.");
-    log("Từ giờ, khi có bản mới hoặc Element tự cập nhật ghi đè lại patch, banner trong app sẽ tự cập nhật — không cần chạy lại file này nữa.");
+    // Only promise in-app updates when the helper is actually there to deliver them. Saying it
+    // regardless is how a machine where schtasks is blocked ended up reporting a clean install and
+    // then never updating — with the reason buried in a log nobody had been told to read.
+    let helperNote: string;
+    if (helper.ok && helper.autostart) {
+        log("Từ giờ, khi có bản mới hoặc Element tự cập nhật ghi đè lại patch, banner trong app sẽ tự cập nhật — không cần chạy lại file này nữa.");
+        helperNote = "";
+    } else if (helper.ok) {
+        log("Helper cập nhật đang chạy, nhưng không tự bật lại sau khi khởi động lại máy — khi đó cần chạy lại file cài này.");
+        helperNote =
+            "\n\nLưu ý: máy này không cho đăng ký tự khởi động nền, nên sau mỗi lần khởi động lại máy cần chạy lại file cài này để bật lại tính năng tự cập nhật.";
+    } else {
+        log(`Không bật được helper cập nhật nền${helper.detail ? ` (${helper.detail})` : ""} — module vẫn chạy, chỉ là không tự cập nhật được.`);
+        helperNote =
+            "\n\nLưu ý: không bật được tính năng tự cập nhật trên máy này (xem nhật ký). N.I.V.R.I.S. vẫn dùng bình thường, chỉ là muốn lên bản mới thì phải chạy lại file cài này.";
+    }
+
     finish(
         TITLE,
         true,
-        "Đã cài đặt N.I.V.R.I.S. thành công!\n\nKiểm tra Element đã tắt hẳn (Task Manager, không còn tiến trình 'Element' — Windows hay ẩn xuống khay hệ thống thay vì thoát), rồi mở lại để bắt đầu dùng.",
+        "Đã cài đặt N.I.V.R.I.S. thành công!\n\nKiểm tra Element đã tắt hẳn (Task Manager, không còn tiến trình 'Element' — Windows hay ẩn xuống khay hệ thống thay vì thoát), rồi mở lại để bắt đầu dùng." +
+            helperNote,
     );
 }
 
