@@ -5,7 +5,7 @@ SPDX-License-Identifier: AGPL-3.0-only OR GPL-3.0-only OR LicenseRef-Element-Com
 Please see LICENSE files in the repository root for full details.
 */
 
-import { getMatrixClient } from "../matrixClient";
+import { getDirectRoomIds, getMatrixClient } from "../matrixClient";
 import { getMentions, getMessageById, getMessagesSince, searchMessages, type StoredNivrisMessage } from "./NivrisMessageDb";
 import { askNivris, NivrisApiError, type NivrisMessage } from "./NivrisApi";
 import { type NivrisSettings } from "./types";
@@ -101,7 +101,10 @@ const PRIORITY_COLORS: TrackerPriorityItem["color"][] = ["blue", "orange", "viol
  */
 async function findMatches(tracker: NivrisUserTracker, preloaded?: StoredNivrisMessage[]): Promise<StoredNivrisMessage[]> {
     const sinceTs = startOfToday();
-    const all = preloaded ?? (await getMessagesSince(sinceTs));
+    // Private messages are never tracked — a tracker is about work happening in rooms, and a DM
+    // showing up under "Sếp" or "Ưu tiên" is both noise and not something the user asked to watch.
+    const directRoomIds = getDirectRoomIds();
+    const all = (preloaded ?? (await getMessagesSince(sinceTs))).filter((m) => !directRoomIds.has(m.roomId));
 
     // Matching is done unbounded and capped afterwards, so the count reported to the UI is the real
     // one. Capping first made a session with 350 messages report "200 tin" — a number that says more

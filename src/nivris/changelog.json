@@ -1,5 +1,12 @@
 [
     {
+        "version": "1.2.25",
+        "date": "2026-09-14",
+        "changes": [
+            "Tin nhắn riêng (DM) không còn được tính vào tracker — không hiện trong feed, số liệu, báo cáo, thông báo hay nhắc báo cáo."
+        ]
+    },
+    {
         "version": "1.2.24",
         "date": "2026-09-12",
         "changes": [

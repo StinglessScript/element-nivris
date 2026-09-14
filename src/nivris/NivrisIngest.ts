@@ -34,7 +34,7 @@ const EventType = { RoomMessage: "m.room.message" as EventTypeT.RoomMessage };
 const MatrixEventEvent = { Decrypted: "Event.decrypted" as MatrixEventEventT.Decrypted };
 const RoomEvent = { Timeline: "Room.timeline" as RoomEventT.Timeline };
 
-import { getMatrixClient } from "../matrixClient";
+import { getDirectRoomIds, getMatrixClient } from "../matrixClient";
 import {
     getMessagesSince,
     getMeta,
@@ -193,6 +193,8 @@ function maybeNotify(record: StoredNivrisMessage, myUserId: string | null): void
     if (record.sender === myUserId) return;
     if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
     if (readSettings().notificationsEnabled === false) return;
+    // Private messages aren't tracked (see findMatches), so they don't notify as a tracker either.
+    if (getDirectRoomIds().has(record.roomId)) return;
 
     const matched = matchingTrackers(record, NivrisTrackerStore.instance.getTrackers());
     if (!matched.length) return;
@@ -406,7 +408,10 @@ async function hasReportedToday(settings: NivrisSettings, messages: StoredNivris
 
 /** Employees/managers tagged for the daily report who haven't actually reported work today. */
 async function findPeopleWithoutReportToday(): Promise<NivrisUserTracker[]> {
-    const todayMessages = await getMessagesSince(startOfToday());
+    // Same scope as the report screen (findMatches): a report sent in a DM doesn't count there, so
+    // it mustn't silence the reminder here either.
+    const directRoomIds = getDirectRoomIds();
+    const todayMessages = (await getMessagesSince(startOfToday())).filter((m) => !directRoomIds.has(m.roomId));
     const messagesBySender = new Map<string, StoredNivrisMessage[]>();
     for (const m of todayMessages) {
         const list = messagesBySender.get(m.sender) ?? [];
