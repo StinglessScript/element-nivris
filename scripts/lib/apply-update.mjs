@@ -302,21 +302,26 @@ export async function applyNivrisUpdate({ moduleDir, builtJsPath, realToken, env
     if (!fs.existsSync(builtJs)) fail(`Không tìm thấy module đã build tại ${builtJs}.`);
 
     try {
-        if (fs.existsSync(webappDir)) {
-            log("webapp/ đã tồn tại (đã cài trước đó) — chỉ cập nhật module.");
-            if (fs.existsSync(webappAsar)) {
-                if (fs.existsSync(webappBackup)) {
-                    fs.rmSync(webappAsar);
-                } else {
-                    fs.renameSync(webappAsar, webappBackup);
-                }
+        if (fs.existsSync(webappAsar)) {
+            // A fresh webapp.asar sitting next to an existing webapp/ means Element's own
+            // auto-updater just dropped a new version (it re-creates webapp.asar whenever it
+            // updates in place, even though our earlier install renamed the original one away) —
+            // any leftover webapp/ is now a stale or partially-patched mix of old and new files
+            // (Element's own delta updater doesn't know about our unpacked directory and can touch
+            // individual files inside it inconsistently), so it can't be trusted and must be
+            // re-extracted from scratch rather than left in place with just the module refreshed.
+            if (fs.existsSync(webappDir)) {
+                log("webapp.asar mới xuất hiện (Element vừa tự cập nhật) — xoá webapp/ cũ và giải nén lại cho khớp.");
+                fs.rmSync(webappDir, { recursive: true, force: true });
             }
-        } else if (fs.existsSync(webappAsar)) {
             log("Giải nén webapp.asar...");
             const { extractAll } = await import("@electron/asar");
             extractAll(webappAsar, webappDir);
+            fs.rmSync(webappBackup, { force: true });
             fs.renameSync(webappAsar, webappBackup);
             log(`Đã sao lưu webapp.asar gốc -> ${webappBackup}`);
+        } else if (fs.existsSync(webappDir)) {
+            log("webapp/ đã tồn tại (đã cài trước đó), không có webapp.asar mới — chỉ cập nhật module.");
         } else {
             fail(`Không tìm thấy webapp.asar tại ${resourcesDir} (đã cài rồi, hoặc bản Element này không dùng asar?).`);
         }
