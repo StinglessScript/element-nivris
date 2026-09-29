@@ -19,7 +19,7 @@ const LOCATION_PATH = "nivris";
 const SPACE_KEY = "nivris";
 
 class NivrisModule implements Module {
-    public static readonly moduleApiVersion = "^1.0.0";
+    public static readonly moduleApiVersion = "^1.0.0 || ^2.0.0";
 
     public constructor(private api: Api) {}
 
