@@ -1,7 +1,7 @@
 {
     "name": "nivris",
     "private": true,
-    "version": "1.2.25",
+    "version": "1.2.26",
     "type": "module",
     "main": "lib/index.js",
     "license": "UNLICENSED",
@@ -20,7 +20,7 @@
     "dependencies": {
         "@arcmantle/vite-plugin-import-css-sheet": "^1.0.12",
         "@electron/asar": "^4.2.1",
-        "@element-hq/element-web-module-api": "^1.17.0",
+        "@element-hq/element-web-module-api": "^2.2.0",
         "@rollup/plugin-node-resolve": "^16.0.3",
         "@types/node": "^22.10.0",
         "@types/react": "^19.2.10",

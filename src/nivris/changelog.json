@@ -1,5 +1,12 @@
 [
     {
+        "version": "1.2.26",
+        "date": "2026-09-29",
+        "changes": [
+            "Sửa lỗi Element mới báo \"Your Element is misconfigured\" — Nivris giờ chạy được với cả Element bản mới lẫn bản cũ."
+        ]
+    },
+    {
         "version": "1.2.25",
         "date": "2026-09-14",
         "changes": [
