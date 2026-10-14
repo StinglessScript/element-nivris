@@ -1746,7 +1746,7 @@ const SettingsPanel: React.FC<{
             setAvailableRelease(state.kind === "new-version" ? getCachedAvailableRelease() : null);
             setUpdateCheckResult(
                 state.kind === "up-to-date"
-                    ? "Đã ở bản mới nhất."
+                    ? `Đã ở bản mới nhất (v${NIVRIS_VERSION}).`
                     : state.kind === "new-version"
                       ? "Có bản mới — bấm nút Cập nhật ở góc dưới màn hình."
                       : state.kind === "patch-missing"
